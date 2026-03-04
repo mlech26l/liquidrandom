@@ -1,0 +1,19 @@
+"""Configuration constants for seed data generation."""
+
+MODEL_NAME = "qwen/qwen3.5-397b-a17b"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+DEFAULT_N = 22000
+DEFAULT_K = 100
+DEFAULT_BATCH_SIZE = 32
+DEFAULT_TAXONOMY_DEPTH = 3
+DEFAULT_SAMPLES_PER_LEAF = 100
+DEFAULT_DEDUP_THRESHOLD = 0.7
+
+MAX_VALIDATION_RETRIES = 3
+REJECT_BATCH_THRESHOLD = 0.5  # Discard batch if >50% rejected
+
+OUTPUT_DIR = "output"
+TAXONOMY_DIR = "output/taxonomies"
+SAMPLES_DIR = "output/samples"
+STATE_FILE = "output/state.json"

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "liquidrandom"
+version = "0.1.0"
+description = "Pseudo-random seed data generation for ML/LLM training diversity"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "huggingface-hub>=0.20.0",
+    "pyarrow>=14.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ty",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/liquidrandom"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+

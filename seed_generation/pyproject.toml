@@ -1,0 +1,15 @@
+[project]
+name = "liquidrandom-seed-generation"
+version = "0.1.0"
+description = "Seed data generation scripts for liquidrandom"
+requires-python = ">=3.11"
+dependencies = [
+    "openai>=1.0.0",
+    "rich>=13.0.0",
+    "typer>=0.9.0",
+    "huggingface-hub>=0.20.0",
+    "pyarrow>=14.0.0",
+]
+
+[tool.uv]
+dev-dependencies = []
