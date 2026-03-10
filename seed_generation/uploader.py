@@ -27,13 +27,23 @@ def _consolidate_category(output_dir: str, category_name: str, dest_dir: Path) -
     if not samples_dir.exists():
         return 0
 
+    # Fields that should be stored as flat columns in Parquet.
+    # For tool_group, the nested "tools" list is redundant with "tools_json" (string).
+    _DROP_FIELDS: dict[str, set[str]] = {
+        "tool_group": {"tools"},
+    }
+    drop = _DROP_FIELDS.get(category_name, set())
+
     rows: list[dict[str, Any]] = []
     for jsonl_file in sorted(samples_dir.glob("*.jsonl")):
         with open(jsonl_file, encoding="utf-8") as in_f:
             for line in in_f:
                 line = line.strip()
                 if line:
-                    rows.append(json.loads(line))
+                    row = json.loads(line)
+                    if drop:
+                        row = {k: v for k, v in row.items() if k not in drop}
+                    rows.append(row)
 
     if not rows:
         return 0

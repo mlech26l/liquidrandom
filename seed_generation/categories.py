@@ -412,4 +412,36 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
         ),
         specificity_guidance="Each entry should show a specific, realistic instruction that demonstrates the complexity type.",
     ),
+    "tool_group": CategoryConfig(
+        name="tool_group",
+        display_name="Tool Groups",
+        fields=[
+            FieldSpec("domain", "string", "Tool group domain (e.g. 'Flight Booking')"),
+            FieldSpec("description", "string", "What this tool group does"),
+            FieldSpec("taxonomy_path", "string", "Taxonomy path this group belongs to"),
+            FieldSpec("tools_json", "string", "JSON-serialized list of ToolFunction dicts"),
+        ],
+        taxonomy_seed_prompt=(
+            "Generate a taxonomy of LLM tool/function calling domains organized by "
+            "service category and specialization. These represent groups of related "
+            "tools that an AI agent would use together.\n\n"
+            "Root categories:\n"
+            "- Communication (email, messaging, calendar)\n"
+            "- Data & Storage (databases, file systems)\n"
+            "- Web & Search (scraping, search, browser automation)\n"
+            "- Code & Development (git, CI/CD, code execution)\n"
+            "- Finance & Commerce (payments, e-commerce, invoicing)\n"
+            "- Travel & Logistics (flights, hotels, maps, shipping)\n"
+            "- Media & Content (image, audio, video, documents)\n"
+            "- Identity & Auth (OAuth, user management)\n"
+            "- AI & ML (inference, embeddings, vector stores)\n"
+            "- Monitoring & Ops (logging, metrics, alerting)\n"
+            "- IoT & Hardware (sensors, device control)\n"
+            "- Healthcare (patient records, appointments)\n\n"
+            "Each leaf should be a specific tool domain "
+            "(e.g. 'Flight search and booking with seat selection' not just 'travel')."
+        ),
+        generation_prompt_template="",  # Not used; tool_sampler has its own prompts
+        specificity_guidance="Each tool group should represent a coherent set of related API functions with inter-tool dependencies.",
+    ),
 }

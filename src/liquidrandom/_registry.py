@@ -14,6 +14,7 @@ from liquidrandom.models.persona import Persona
 from liquidrandom.models.reasoning_pattern import ReasoningPattern
 from liquidrandom.models.scenario import Scenario
 from liquidrandom.models.science_topic import ScienceTopic
+from liquidrandom.models.tool_group import ToolGroup
 from liquidrandom.models.writing_style import WritingStyle
 
 REPO_ID = "mlech26l/liquidrandom-data"
@@ -40,4 +41,5 @@ CATEGORIES: dict[str, CategoryInfo] = {
     "instruction_complexity": CategoryInfo(
         InstructionComplexity, "instruction_complexity.parquet"
     ),
+    "tool_group": CategoryInfo(ToolGroup, "tool_group.parquet"),
 }

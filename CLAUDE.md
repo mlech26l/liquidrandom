@@ -1,183 +1,142 @@
 # Liquidrandom
 
-This is a python package for pseudo random data generation. It is made for machine learning to seed the data generation process.
-ie. a typical use-case is using an LLM to generate data for training another model, which has the problem of a lack of randomness in the generated data. This package is designed to solve that problem by providing a way to add randomness to the data generation process by for instance adding random personas or jobs into the prompt.
+Python package for pseudo-random seed data generation for ML/LLM training diversity.
 
-## Package
+## Project Structure
 
-The package is called `liquidrandom` and can be installed via pip.
-We are using typed python.
-We are using ty and uv for type checking and dependency management respectively.
-Create a pyproject.toml file for the package.
-
-The package should be usable as following:
-
-```python3
-import liquidrandom
-
-persona = liquidrandom.persona()
-job = liquidrandom.job()
-coding_task = liquidrandom.coding_task()
-math_category = liquidrandom.math_category()
-writing_style = liquidrandom.writing_style()
-scenario = liquidrandom.scenario()
-domain = liquidrandom.domain()
-science_topic = liquidrandom.science_topic()
-language = liquidrandom.language()
-reasoning_pattern = liquidrandom.reasoning_pattern()
-emotional_state = liquidrandom.emotional_state()
-instruction_complexity = liquidrandom.instruction_complexity()
+```
+├── pyproject.toml                  # hatchling build, deps: huggingface-hub, pyarrow
+├── .python-version                 # 3.12
+├── README.md
+├── src/liquidrandom/
+│   ├── __init__.py                 # Public API: persona(), job(), etc. + model re-exports
+│   ├── py.typed                    # PEP 561 marker
+│   ├── _loader.py                  # HuggingFace fetch + Parquet read + in-memory cache
+│   ├── _registry.py                # Category → model class + filename mapping
+│   └── models/                     # 12 frozen dataclasses with from_dict() and __str__()
+│       ├── __init__.py
+│       ├── persona.py
+│       ├── job.py
+│       ├── coding_task.py
+│       ├── math_category.py
+│       ├── writing_style.py
+│       ├── scenario.py
+│       ├── domain.py
+│       ├── science_topic.py
+│       ├── language.py
+│       ├── reasoning_pattern.py
+│       ├── emotional_state.py
+│       └── instruction_complexity.py
+├── tests/
+│   ├── test_models.py              # from_dict + __str__ for all 12 models
+│   └── test_loader.py              # Parquet loading, caching, public API (mocked HF)
+└── seed_generation/                # Separate project with own pyproject.toml
+    ├── pyproject.toml              # deps: openai, rich, typer, huggingface-hub, pyarrow
+    ├── README.md
+    ├── generate.py                 # CLI: `generate` and `upload-only` commands (typer)
+    ├── config.py                   # Constants and defaults
+    ├── categories.py               # 12 CategoryConfig with field specs and prompt templates
+    ├── taxonomy.py                 # Phase 1: BFS taxonomy tree generation
+    ├── sampler.py                  # Phase 2: round-robin sample generation
+    ├── validator.py                # LLM quality validation per batch
+    ├── dedup.py                    # Jaccard similarity dedup on token sets
+    ├── llm.py                      # AsyncOpenAI client wrapper with retries
+    ├── uploader.py                 # Consolidate JSONL → Parquet + upload to HF
+    └── state.py                    # Checkpoint/resume state
 ```
 
-Use types and objects for the seed data, for instance a Persona object with name, age, etc. and a Job object with name and description.
-Make sure to overwrite the __str__ method of the objects to return a string representation of the object that can be used in the prompt for the LLM.
+## Tooling
 
-Create a clear and concise README.md file that explains the package, how to install it, and how to use it. Include examples of how to use the package in the README.md file.
+- **Package manager**: uv
+- **Type checker**: ty (run `uv run ty check src/ tests/`)
+- **Tests**: pytest (`uv run pytest tests/`)
+- **Typed Python**: all code uses type annotations, `from __future__ import annotations`
 
-## Seed data
+## Key Design Decisions
 
-The seed data we want to host on huggingface. Make sure only the needed data is fetched and that the package is not too heavy. 
-The seed data should be cached locally after the first fetch.
+### Data format: Parquet (not JSONL)
+Seed data is stored as zstd-compressed Parquet on HuggingFace (`mlech26l/liquidrandom-data`). Parquet gives ~5-10x smaller files than JSONL, and pyarrow is already in the typical ML stack. The intermediate per-leaf files during generation remain JSONL (append-friendly), converted to Parquet at upload time.
 
-## Seed data generation
+### Data loading
+- `_loader.py` uses `hf_hub_download()` to fetch a single Parquet file per category (not the whole repo)
+- Disk cache handled by huggingface-hub (~/.cache/huggingface/hub/)
+- In-memory cache via module-level `_cache` dict avoids re-parsing within a session
 
-Let's create a seperate folder where we put the "run once" scripts that generate the seed data and upload it to huggingface.
-We want to use openrouter.ai for the generation of the seed data.
+### Leaf file naming: SHA-256 hash
+Per-leaf sample files use `hashlib.sha256(path)[:16]` as filename to avoid filesystem path length limits from deep taxonomy paths.
+
+### Parallelization
+Both taxonomy expansion and sample generation use `asyncio.Semaphore(batch_size)` with `AsyncOpenAI`. Progress updates per-leaf completion (not per-batch) for responsive UI.
+
+### Generation defaults
+Tuned so `k` matches `samples_per_leaf` to minimize wasted LLM output:
+- `n=22000, k=100, batch_size=32, taxonomy_depth=3, samples_per_leaf=100`
+- Yields ~216 leaves, ~100 samples each, ~432 LLM call pairs (generate + validate)
+
+### List field handling in models
+All `from_dict()` methods use `list(data["field"] or [])` to handle None values from Parquet columns.
+
+## Seed Data Generation
+
+### LLM
+- Model: `qwen/qwen3.5-397b-a17b` via OpenRouter (`OPENROUTER_API_KEY` env var)
+- Reasoning enabled via `extra_body={"reasoning": {"enabled": True}}`
+- JSON responses extracted with fallback parsing (direct, code blocks, brace matching)
+
+### Two-phase approach
+1. **Taxonomy**: BFS expansion of category tree, branching factor auto-scaled from `(n / samples_per_leaf)^(1/depth)`. Saved as JSON in `output/taxonomies/`.
+2. **Round-robin sampling**: all incomplete leaves dispatched concurrently (semaphore-limited), each does generate → validate → dedup. Progress bar updates per-leaf.
+
+### Quality pipeline
+- **Validation**: second LLM call checks for empty/placeholder content, hallucinations, repetitiveness, off-topic, insufficient specificity. >50% rejection discards entire batch (up to 3 retries).
+- **Dedup**: Jaccard similarity on normalized word-level token sets (default threshold 0.7). Checks within-leaf and within-batch.
+- **Stall detection**: 3 consecutive rounds with zero progress stops the category.
+
+### Upload
+`python generate.py upload-only` consolidates per-leaf JSONL into per-category zstd Parquet, generates a dataset card, uploads via `HfApi` (`HF_TOKEN` env var). Repo is auto-created.
+
+### CLI usage
+```bash
+cd seed_generation
+uv sync
+
+# Generate (defaults: n=22000, k=100, depth=3, spl=100, batch=32)
+python generate.py generate
+
+# Specific categories
+python generate.py generate --categories persona --categories job
+
+# Resume interrupted run
+python generate.py generate --resume
+
+# Upload to HuggingFace
+python generate.py upload-only --repo-id mlech26l/liquidrandom-data
+```
+
+## Categories (12)
+
+| Category | Model | Key Fields |
+|---|---|---|
+| persona | Persona | name, age, gender, occupation, nationality, personality_traits, background |
+| job | Job | title, industry, description, required_skills, experience_level |
+| coding_task | CodingTask | title, language, difficulty, description, constraints, expected_behavior |
+| math_category | MathCategory | name, field, description, example_problems |
+| writing_style | WritingStyle | name, tone, characteristics, description |
+| scenario | Scenario | title, context, setting, stakes, description |
+| domain | Domain | name, parent_field, description, key_concepts |
+| science_topic | ScienceTopic | name, scientific_field, subfield, description |
+| language | Language | name, region, register, script, cultural_notes |
+| reasoning_pattern | ReasoningPattern | name, category, description, when_to_use |
+| emotional_state | EmotionalState | name, intensity, valence, behavioral_description |
+| instruction_complexity | InstructionComplexity | level, ambiguity, description, example |
+
+## Package Usage
 
 ```python
-from openai import OpenAI
+import liquidrandom
 
-client = OpenAI(
-  base_url="https://openrouter.ai/api/v1",
-  api_key="<OPENROUTER_API_KEY>",
-)
-
-# First API call with reasoning
-response = client.chat.completions.create(
-  model="qwen/qwen3.5-397b-a17b",
-  messages=[
-          {
-            "role": "user",
-            "content": "How many r's are in the word 'strawberry'?"
-          }
-        ],
-  extra_body={"reasoning": {"enabled": True}}
-)
-
-# Extract the assistant message with reasoning_details
-response = response.choices[0].message
-
-# Preserve the assistant message with reasoning_details
-messages = [
-  {"role": "user", "content": "How many r's are in the word 'strawberry'?"},
-  {
-    "role": "assistant",
-    "content": response.content,
-    "reasoning_details": response.reasoning_details  # Pass back unmodified
-  },
-  {"role": "user", "content": "Are you sure? Think carefully."}
-]
-
-# Second API call - model continues reasoning from where it left off
-response2 = client.chat.completions.create(
-  model="qwen/qwen3.5-397b-a17b",
-  messages=messages,
-  extra_body={"reasoning": {"enabled": True}}
-)
+persona = liquidrandom.persona()    # Returns Persona dataclass
+job = liquidrandom.job()            # Returns Job dataclass
+print(persona)                      # LLM-prompt-friendly string
+print(persona.name)                 # Access individual fields
 ```
-
-You can assume the envvar OPENROUTER_API_KEY is set.
-For uploading to huggingface, either let me know how to do it, or you the envvar HF_TOKEN.
-
-We want to accelerate the process, thus using either async or ThreadPoolExecutor for the generation of the seed data in parallel.
-The batch size should be controlable via a cli arguemnt --batch-size
-
-Per LLM call we want to generate at least k samples, where n is controlable via a cli argument --k. Make sure to include in the prompting and the parsing of the response that there are multiple samples generated per call. 
-
-After each generation call, we want to call the same LLM again to check if the generated data is good enough. This process should check if there are collapsed or degenerate samples, e.g. halluications or repetitive samples. If the generated data is not good enough, we discard the current call and generate new data until we have good enough data. This is to ensure that the generated data is of high quality and not too similar to each other.
-
-In total we want to generate at least n samples per category, where n is controlable via a cli argument --n.
-
-## Diversity strategy: Hierarchical Taxonomy Tree
-
-To generate 10k-100k samples without collapsing into repetitive subsets, we use a two-phase hierarchical approach:
-
-### Phase 1: Taxonomy generation
-
-Before generating any seed data samples, first use the LLM to generate a deep taxonomy tree for each category. The tree should be broad at the top and increasingly specific at the leaves.
-
-Example for Science topics:
-```
-Science
-├── Physics
-│   ├── Quantum Mechanics
-│   │   ├── Entanglement phenomena
-│   │   │   ├── Bell state preparation in ion traps
-│   │   │   ├── Quantum teleportation protocols
-│   │   │   └── Loophole-free Bell tests
-│   │   ├── Decoherence
-│   │   │   ├── Environment-induced superselection
-│   │   │   └── ...
-│   ├── Thermodynamics
-│   │   └── ...
-├── Biology
-│   └── ...
-```
-
-The taxonomy depth should auto-scale based on the target sample count:
-- `required_leaf_nodes = target_samples / samples_per_leaf`
-- More samples → deeper tree → more leaf nodes
-- The taxonomy itself should be generated in stages: first top-level branches, then expand each branch deeper, to avoid context window limitations.
-
-The taxonomy generation should also be controllable via a cli argument `--taxonomy-depth` to control the depth of the taxonomy tree and `--samples-per-leaf` to control how many samples to generate per leaf node.
-
-The taxonomy should be saved to disk as JSON so it can be inspected, reused, and resumed.
-
-### Phase 2: Round-robin sample generation
-
-Generate samples by cycling through all leaf nodes in round-robin fashion:
-
-```
-for leaf in cycle(all_leaf_nodes):
-    generate k samples for this specific leaf
-    validate & dedup
-    if leaf.count >= target_per_leaf:
-        mark leaf as done
-```
-
-This ensures that no single subtopic gets over-represented. Each generation prompt should include the leaf node's full path in the taxonomy (e.g. "Science > Physics > Quantum Mechanics > Entanglement phenomena > Bell state preparation in ion traps") to anchor the LLM to that specific subtopic.
-
-The previously generated samples for the current leaf should be included in the prompt to avoid repetition within the same leaf.
-
-### Deduplication: Fuzzy string matching
-
-Use token-level fuzzy string matching to detect and reject near-duplicate samples. No ML dependency needed.
-
-Approach:
-- Use Jaccard similarity on token sets (word-level) to compare new samples against all existing samples in the same category.
-- Reject samples with a Jaccard similarity above a configurable threshold (default: 0.7).
-- Additionally, normalize samples before comparison (lowercase, strip punctuation, collapse whitespace) to catch trivial reformulations.
-- The dedup check should run on the `__str__` representation of each sample.
-- The threshold should be controllable via a cli argument `--dedup-threshold`.
-
-## Categories of seed data
-
-- Persona: random personas with name, age etc.
-- Professions or jobs: Random professions or jobs with a name and description of the job.
-- Coding tasks: Specific programming challenges and tasks (e.g. "implement a trie-based autocomplete with fuzzy matching", "write a rate limiter using the token bucket algorithm"). Should include the programming context, constraints, and expected behavior.
-- Math categories: Random math categories like algebra, geometry, etc. with a description of the category.
-- Writing styles / tones: Diverse writing styles and tones (e.g. "sardonic academic critique", "enthusiastic technical blogger", "dry legal prose"). Includes the style name and a description of its characteristics.
-- Scenarios / situations: Real-world scenarios or situations (e.g. "debugging a production outage at 2am", "negotiating a contract with a difficult vendor"). Includes the scenario description and relevant context.
-- Domains / topics: Specific knowledge domains and subtopics (e.g. "supply chain logistics for perishable goods", "comparative analysis of NoSQL databases"). Includes the domain name and a detailed description.
-- Science topics: Specific scientific topics and phenomena (e.g. "quantum entanglement in photon pairs", "CRISPR-Cas9 off-target effects in gene therapy", "tidal locking in exoplanetary systems"). Includes the topic name, scientific field, and a description.
-- Languages / locales: Random languages, dialects, or cultural contexts (e.g. "Brazilian Portuguese, informal register", "Kansai Japanese dialect"). Includes the language, region, register, and cultural notes.
-- Reasoning patterns: Types of reasoning or problem-solving approaches (e.g. "proof by contradiction", "cost-benefit analysis with uncertainty", "analogical reasoning from biology to engineering"). Includes the pattern name and description of how it works.
-- Emotional states: Specific emotional states or moods (e.g. "frustrated but trying to stay polite", "cautiously optimistic after a setback"). Includes the emotional state and behavioral description.
-- Instruction complexity: Varying levels of instruction complexity and ambiguity (e.g. "vague one-liner request", "detailed multi-step specification with constraints", "contradictory requirements"). Includes the complexity level, a description, and an example.
-
-Make sure the seed data is very specific, ie. "algebra" is not a good seed data, but "different ways to solve linear equations" is a good seed data. This is to ensure that the generated data for training is more diverse and not too similar to each other.
-
-For the generation process, use the rich python library to show progress as well as the expected time of arrival (ETA) for the generation process.
-
-dependencies and README for the run once seed generation scripts should be in the same folder as the scripts and different from the main package. The main package should not have any dependencies that are not needed for the generation of the seed data.
-

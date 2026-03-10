@@ -35,6 +35,7 @@ _MODEL_FIELDS: dict[str, list[str]] = {
     "reasoning_pattern": ["name", "category", "description", "when_to_use"],
     "emotional_state": ["name", "intensity", "valence", "behavioral_description"],
     "instruction_complexity": ["level", "ambiguity", "description", "example"],
+    "tool_group": ["domain", "description", "taxonomy_path"],
 }
 
 
@@ -61,8 +62,75 @@ def format_value(value: Any) -> str:
     return str(value)
 
 
+def _parse_tools(sample: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract the tools list from a tool_group sample."""
+    raw = sample.get("tools_json") or sample.get("tools")
+    if isinstance(raw, str):
+        raw = json.loads(raw)
+    return list(raw or [])
+
+
+def render_tool_group(sample: dict[str, Any], index: int) -> Panel:
+    """Render a tool_group sample with nested tool/variation detail."""
+    from rich.console import Group as RichGroup
+
+    parts: list[Any] = []
+
+    # Header fields
+    header = Table(show_header=False, box=None, padding=(0, 1), expand=True)
+    header.add_column("Field", style="bold cyan", no_wrap=True, ratio=1)
+    header.add_column("Value", ratio=4)
+    for field in ("domain", "description", "taxonomy_path"):
+        if field in sample:
+            header.add_row(field, format_value(sample[field]))
+    parts.append(header)
+
+    tools = _parse_tools(sample)
+    for ti, tool in enumerate(tools):
+        tool_table = Table(show_header=False, box=None, padding=(0, 1), expand=True)
+        tool_table.add_column("Field", style="bold green", no_wrap=True, ratio=1)
+        tool_table.add_column("Value", ratio=4)
+        tool_table.add_row("canonical_name", tool.get("canonical_name", ""))
+        tool_table.add_row("description", tool.get("description", ""))
+
+        variations = tool.get("variations", [])
+        tool_table.add_row("variations", str(len(variations)))
+
+        for vi, var in enumerate(variations):
+            params = var.get("parameters", {})
+            props = params.get("properties", {})
+            required = params.get("required", [])
+            param_names = [
+                f"{'*' if p in required else ''}{p}:{props[p].get('type', '?')}"
+                for p in props
+            ]
+            returns = var.get("returns", {})
+            ret_props = returns.get("properties", {})
+            ret_names = [f"{p}:{ret_props[p].get('type', '?')}" for p in ret_props]
+
+            tool_table.add_row(
+                f"  v{vi} {var.get('name', '')}",
+                f"params({', '.join(param_names)}) -> ({', '.join(ret_names)})",
+            )
+
+        parts.append(Panel(
+            tool_table,
+            title=f"[bold]Tool {ti + 1}/{len(tools)}[/bold]",
+            border_style="green",
+        ))
+
+    return Panel(
+        RichGroup(*parts),
+        title=f"[bold]#{index + 1}[/bold]",
+        border_style="dim",
+    )
+
+
 def render_sample(sample: dict[str, Any], index: int, category_name: str) -> Panel:
     """Render a single sample as a rich Panel."""
+    if category_name == "tool_group":
+        return render_tool_group(sample, index)
+
     fields = _MODEL_FIELDS.get(category_name, list(sample.keys()))
 
     table = Table(show_header=False, box=None, padding=(0, 1), expand=True)

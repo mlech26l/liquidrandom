@@ -44,6 +44,7 @@ print(task)
 | `liquidrandom.reasoning_pattern()` | `ReasoningPattern` | 🧠 Reasoning approaches with name, category, description, when to use |
 | `liquidrandom.emotional_state()` | `EmotionalState` | 💭 Emotional states with name, intensity, valence, behavioral description |
 | `liquidrandom.instruction_complexity()` | `InstructionComplexity` | 📐 Instruction complexity levels with level, ambiguity, description, example |
+| `liquidrandom.tool_group()` | `ToolGroup` | 🔧 Groups of related LLM tools/functions in OpenAI format, each with multiple parameter variations |
 
 ## 🛠️ Usage Example
 
@@ -83,7 +84,7 @@ print(persona.personality_traits)  # ["curious", "patient"]
 
 ## ⚙️ How It Works
 
-The dataset contains 340,000+ samples across 12 categories, generated using hierarchical taxonomy trees with LLM-based quality validation and fuzzy deduplication.
+The dataset contains 340,000+ samples across 13 categories, generated using hierarchical taxonomy trees with LLM-based quality validation and fuzzy deduplication.
 
 Seed data is hosted on HuggingFace ([mlech26l/liquidrandom-data](https://huggingface.co/datasets/mlech26l/liquidrandom-data)) as zstd-compressed Parquet files. On first use, only the requested category file is downloaded and cached locally. Subsequent calls use the cached data.
 
@@ -171,6 +172,52 @@ described as surgical procedures, Canvas absorbing blood as nourishment,
 Glorification of artistic consumption
 ```
 </details>
+
+<details>
+<summary>🔧 Tool Group</summary>
+
+```
+Tool Group: Cloud Object Versioning and History Retrieval
+  (Travel > Cloud Storage > Versioning)
+Tools (4): simulate_restore_impact, calculate_storage_delta,
+  authorize_rollback, execute_rollback
+Each tool has 8 parameter variations, e.g. for simulate_restore_impact:
+  v0: simulate_restore_impact(bucket_name, object_key, target_version_id)
+  v1: evaluate_rollback_safety(storage_context, version_selector, scan_preferences)
+  v2: assess_restore_feasibility(cloud_resource_arn, historical_epoch, validation_flags)
+  ...
+```
+</details>
+
+### 🔧 Tool Groups: Usage Notes
+
+Tool groups provide sets of related LLM tool/function definitions in OpenAI function calling format, each with 8 parameter variations. They are useful for testing agentic workflows against diverse tool signatures.
+
+```python
+import liquidrandom
+
+group = liquidrandom.tool_group()
+print(group.domain)        # "Cloud Object Versioning and History Retrieval"
+print(len(group.tools))    # 3-5 tools per group
+
+for tool in group.tools:
+    print(tool.canonical_name)        # "search_flights"
+    print(len(tool.variations))       # 8 parameter variations
+    for var in tool.variations:
+        print(var.name)               # "find_available_flights"
+        print(var.parameters)         # OpenAI JSON Schema dict
+        print(var.returns)            # OpenAI JSON Schema dict
+```
+
+**Known limitations:**
+
+- **Low tool count diversity.** ~62% of groups have 3 tools, ~37% have 4, and only ~1% have 5. If your use case is sensitive to tool count, consider sampling multiple groups and combining or dropping tools to get a wider distribution.
+- **Cross-variation interface drift.** The canonical (v0) tools within a group have coherent inter-tool interfaces (e.g. tool A's return value matches tool B's input). However, variations were generated independently per tool, so variation N of tool A may not perfectly align with variation N of tool B (e.g. differently named keys or slightly different semantics). This is fine for testing individual tool signatures but may cause inconsistencies if you mix-and-match variation indices across tools within a group.
+
+## TODO / Future Improvements
+
+- **Tool group cross-variation alignment.** Currently, variations for each tool within a group are generated independently. This means variation N of tool A and variation N of tool B have no guaranteed interface compatibility (matching parameter/return names). A future improvement would be to generate variations at the group level rather than per-tool, ensuring that all tools in a variation set have coherent inter-tool interfaces.
+- **Over-specificity in some categories.** Some seed data types have far more samples than needed for good diversity coverage. In particular, `language` (~22k samples) and `writing_style` (~25k samples) are over-specified, containing highly niche entries (e.g. obscure professional terminologies, hyper-specific literary styles) that are unlikely to be useful for most generation pipelines. These categories would benefit from being regenerated with a shallower taxonomy (1-2 levels) and a much smaller target count (~500 samples) focused on broad, practical coverage. Most other categories (e.g. `job`, `persona`, `coding_task`) benefit from their large sample counts and are fine as-is.
 
 ## 📄 License
 

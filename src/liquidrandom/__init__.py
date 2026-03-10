@@ -17,6 +17,9 @@ from liquidrandom.models import (
     ReasoningPattern,
     Scenario,
     ScienceTopic,
+    ToolFunction,
+    ToolGroup,
+    ToolVariation,
     WritingStyle,
 )
 
@@ -32,6 +35,9 @@ __all__ = [
     "ReasoningPattern",
     "Scenario",
     "ScienceTopic",
+    "ToolFunction",
+    "ToolGroup",
+    "ToolVariation",
     "WritingStyle",
     "persona",
     "job",
@@ -45,6 +51,7 @@ __all__ = [
     "reasoning_pattern",
     "emotional_state",
     "instruction_complexity",
+    "tool_group",
 ]
 
 
@@ -106,3 +113,8 @@ def emotional_state() -> EmotionalState:
 def instruction_complexity() -> InstructionComplexity:
     """Return a random instruction complexity level."""
     return random.choice(load_category("instruction_complexity"))
+
+
+def tool_group() -> ToolGroup:
+    """Return a random tool group."""
+    return random.choice(load_category("tool_group"))
