@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "liquidrandom"
-version = "0.3.0"
+version = "0.3.1"
 description = "Pseudo-random seed data generation for ML/LLM training diversity"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -22,6 +22,17 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/liquidrandom"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "output/",
+    "backup/",
+    "example_audio/",
+    "seed_generation/output/",
+    "seed_generation/.venv/",
+    "dist/",
+    ".pytest_cache/",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
