@@ -3,8 +3,14 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import logging
+
 import pyarrow.parquet as pq
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import disable_progress_bars
+
+disable_progress_bars()
+logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
 
 from liquidrandom._registry import CATEGORIES, REPO_ID
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "liquidrandom"
-version = "0.3.1"
+version = "0.3.2"
 description = "Pseudo-random seed data generation for ML/LLM training diversity"
 readme = "README.md"
 requires-python = ">=3.11"
