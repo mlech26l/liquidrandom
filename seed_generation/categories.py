@@ -64,8 +64,10 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
         name="job",
         display_name="Jobs",
         fields=[
+            FieldSpec("job_category", "string", "Broad job category (e.g. 'Data Science', 'DevOps', 'Clinical Research')"),
+            FieldSpec("sector", "string", "Broad sector (e.g. 'Financial Services', 'Healthcare', 'Government')"),
             FieldSpec("title", "string", "Specific job title"),
-            FieldSpec("industry", "string", "Industry sector"),
+            FieldSpec("industry", "string", "Specific industry niche"),
             FieldSpec("description", "string", "What the job entails (2-3 sentences)"),
             FieldSpec("required_skills", "array of strings", "3-5 specific required skills"),
             FieldSpec("experience_level", "string", "Experience level (entry/mid/senior/lead/executive)"),
@@ -83,8 +85,12 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
             "{existing_samples}\n\n"
             "Return a JSON object with a single key \"samples\" containing an array of {k} objects. "
             "Each object must have these exact fields:\n"
+            "- job_category (string): Broad job category (e.g. 'Data Science', 'DevOps', 'Clinical Research') - "
+            "this should be broader than the title, applicable to many similar roles\n"
+            "- sector (string): Broad economic sector (e.g. 'Financial Services', 'Healthcare', 'Government') - "
+            "broader than the specific industry\n"
             "- title (string): Specific job title\n"
-            "- industry (string): Industry sector\n"
+            "- industry (string): Specific industry niche\n"
             "- description (string): What the job entails (2-3 sentences)\n"
             "- required_skills (array of strings): 3-5 specific required skills\n"
             "- experience_level (string): one of entry/mid/senior/lead/executive"
@@ -98,9 +104,12 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
             FieldSpec("title", "string", "Short title of the task"),
             FieldSpec("language", "string", "Programming language"),
             FieldSpec("difficulty", "string", "easy/medium/hard/expert"),
-            FieldSpec("description", "string", "Detailed task description (2-4 sentences)"),
-            FieldSpec("constraints", "array of strings", "2-4 specific constraints"),
-            FieldSpec("expected_behavior", "string", "What the solution should do"),
+            FieldSpec("description", "string", "Detailed task description (2-4 sentences). Must be specific enough to understand and execute without ambiguity."),
+            FieldSpec("constraints", "array of strings", "2-4 specific constraints. Each constraint must be concrete and measurable."),
+            FieldSpec("expected_behavior", "string", "What the solution should do. Be detailed about inputs, outputs, and edge case handling."),
+            FieldSpec("follow_up_task", "string", "A feature or extension that can be added as a follow-up. Must be related to the original task and detailed enough to implement. Should NOT be about change requests or edge cases."),
+            FieldSpec("change_request", "string", "A change request to the original task, useful for testing ability to modify existing solutions. Be specific about what should change and why."),
+            FieldSpec("edge_cases", "array of strings", "2-4 edge cases or additional input types that make the task more challenging. If the task doesn't have natural edge cases, describe unusual inputs to support."),
         ],
         taxonomy_seed_prompt=(
             "Generate a taxonomy of programming tasks organized by domain "
@@ -111,8 +120,10 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
         ),
         generation_prompt_template=(
             "Generate {k} unique, highly specific coding tasks that fit the category: {leaf_path}\n\n"
-            "Each task must be a concrete programming challenge with clear requirements. "
-            "Avoid vague or overly broad tasks.\n\n"
+            "Each task must be a concrete programming challenge with clear, detailed requirements. "
+            "The description must be specific enough that a developer can understand and implement it "
+            "without asking clarifying questions. Constraints and expected behavior must be concrete and "
+            "measurable. Avoid vague or overly broad tasks.\n\n"
             "Previously generated tasks for this category (DO NOT repeat these):\n"
             "{existing_samples}\n\n"
             "Return a JSON object with a single key \"samples\" containing an array of {k} objects. "
@@ -120,9 +131,14 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
             "- title (string): Short, descriptive title\n"
             "- language (string): Programming language\n"
             "- difficulty (string): one of easy/medium/hard/expert\n"
-            "- description (string): Detailed task description (2-4 sentences)\n"
-            "- constraints (array of strings): 2-4 specific constraints\n"
-            "- expected_behavior (string): What the solution should do"
+            "- description (string): Detailed task description (2-4 sentences), specific enough to implement\n"
+            "- constraints (array of strings): 2-4 specific, measurable constraints\n"
+            "- expected_behavior (string): Detailed description of what the solution should do\n"
+            "- follow_up_task (string): A feature or extension that could be added later. Must be a genuine "
+            "feature extension related to the original task, NOT a change request or edge case handling.\n"
+            "- change_request (string): A specific change request to modify the original requirements. "
+            "Describe what should change and why.\n"
+            "- edge_cases (array of strings): 2-4 edge cases or unusual inputs that make the task more challenging"
         ),
         specificity_guidance="Each task should specify exact algorithms, data structures, or techniques needed.",
     ),
@@ -130,6 +146,7 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
         name="math_category",
         display_name="Math Categories",
         fields=[
+            FieldSpec("broad_topic", "string", "Broad math topic (e.g. 'Equation Solving', 'Optimization', 'Number Theory')"),
             FieldSpec("name", "string", "Specific math topic name"),
             FieldSpec("field", "string", "Mathematical field"),
             FieldSpec("description", "string", "What this topic covers (2-3 sentences)"),
@@ -150,6 +167,8 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
             "{existing_samples}\n\n"
             "Return a JSON object with a single key \"samples\" containing an array of {k} objects. "
             "Each object must have these exact fields:\n"
+            "- broad_topic (string): Broad math topic category (e.g. 'Equation Solving', 'Optimization', "
+            "'Proof Techniques') - should be applicable to many related specific topics\n"
             "- name (string): Specific math topic name\n"
             "- field (string): Mathematical field\n"
             "- description (string): What this topic covers (2-3 sentences)\n"
@@ -161,7 +180,8 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
         name="writing_style",
         display_name="Writing Styles",
         fields=[
-            FieldSpec("name", "string", "Name of the writing style"),
+            FieldSpec("category", "string", "Broad writing style category (e.g. 'Academic Writing', 'Journalistic', 'Creative Fiction', 'Technical')"),
+            FieldSpec("name", "string", "Distinctive name for the style"),
             FieldSpec("tone", "string", "Overall tone"),
             FieldSpec("characteristics", "array of strings", "3-5 stylistic characteristics"),
             FieldSpec("description", "string", "Description of the style (2-3 sentences)"),
@@ -169,30 +189,36 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
         taxonomy_seed_prompt=(
             "Generate a taxonomy of writing styles organized by register "
             "(formal/informal), purpose (persuasive, informative, creative, etc.), "
-            "and cultural/historical context. Each leaf should be a very specific "
-            "style (e.g. 'Victorian epistolary prose with satirical undertones' "
-            "not just 'formal writing')."
+            "and medium (essay, social media, technical documentation, etc.). "
+            "Each leaf should be a specific but broadly applicable style "
+            "(e.g. 'conversational tech blog post' not 'Victorian epistolary prose "
+            "with satirical undertones about industrial economics')."
         ),
         generation_prompt_template=(
-            "Generate {k} unique, highly specific writing styles that fit the category: {leaf_path}\n\n"
-            "Each style must be distinctive and well-characterized. "
-            "Avoid generic or overlapping styles.\n\n"
+            "Generate {k} unique, specific writing styles that fit the category: {leaf_path}\n\n"
+            "Each style must be distinctive and well-characterized. Styles should be broadly "
+            "applicable across domains, not tied to a specific niche or historical period. "
+            "Avoid hyper-specific styles that only apply to one domain.\n\n"
             "Previously generated styles for this category (DO NOT repeat these):\n"
             "{existing_samples}\n\n"
             "Return a JSON object with a single key \"samples\" containing an array of {k} objects. "
             "Each object must have these exact fields:\n"
+            "- category (string): Broad writing style category (e.g. 'Academic Writing', 'Journalistic', "
+            "'Creative Fiction', 'Technical') - applicable to many similar styles\n"
             "- name (string): Distinctive name for the style\n"
             "- tone (string): Overall tone\n"
             "- characteristics (array of strings): 3-5 stylistic characteristics\n"
             "- description (string): Description of the style (2-3 sentences)"
         ),
-        specificity_guidance="Each style should be distinctive enough that two different writers would produce noticeably different text.",
+        specificity_guidance="Each style should be distinctive enough that two different writers would produce noticeably different text, but broad enough to apply across domains.",
     ),
     "scenario": CategoryConfig(
         name="scenario",
         display_name="Scenarios",
         fields=[
-            FieldSpec("title", "string", "Short title"),
+            FieldSpec("broad_title", "string", "Broad scenario category (e.g. 'Loan forgiveness scenario', 'Team conflict resolution', 'Emergency response')"),
+            FieldSpec("theme", "string", "Thematic category (e.g. 'Financial hardship', 'Workplace dynamics', 'Natural disaster')"),
+            FieldSpec("title", "string", "Specific scenario title"),
             FieldSpec("context", "string", "Background context"),
             FieldSpec("setting", "string", "Physical or temporal setting"),
             FieldSpec("stakes", "string", "What is at stake"),
@@ -213,7 +239,10 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
             "{existing_samples}\n\n"
             "Return a JSON object with a single key \"samples\" containing an array of {k} objects. "
             "Each object must have these exact fields:\n"
-            "- title (string): Short, descriptive title\n"
+            "- broad_title (string): Broad scenario category (e.g. 'Loan forgiveness scenario', "
+            "'Team conflict resolution') - should be applicable if you only need the high-level gist\n"
+            "- theme (string): Thematic category (e.g. 'Financial hardship', 'Workplace dynamics')\n"
+            "- title (string): Specific, detailed scenario title\n"
             "- context (string): Background context\n"
             "- setting (string): Physical or temporal setting\n"
             "- stakes (string): What is at stake\n"
@@ -225,7 +254,9 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
         name="domain",
         display_name="Domains",
         fields=[
-            FieldSpec("name", "string", "Domain name"),
+            FieldSpec("broad_category", "string", "Top-level discipline (e.g. 'Sciences', 'Engineering', 'Humanities', 'Business')"),
+            FieldSpec("area", "string", "Broad area within the discipline (e.g. 'Machine Learning', 'Constitutional Law', 'Supply Chain')"),
+            FieldSpec("name", "string", "Specific domain name"),
             FieldSpec("parent_field", "string", "Parent field or discipline"),
             FieldSpec("description", "string", "What this domain covers (2-3 sentences)"),
             FieldSpec("key_concepts", "array of strings", "3-5 key concepts"),
@@ -245,6 +276,10 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
             "{existing_samples}\n\n"
             "Return a JSON object with a single key \"samples\" containing an array of {k} objects. "
             "Each object must have these exact fields:\n"
+            "- broad_category (string): Top-level discipline (e.g. 'Sciences', 'Engineering', 'Humanities', "
+            "'Business') - the broadest classification\n"
+            "- area (string): Broad area within the discipline (e.g. 'Machine Learning', 'Constitutional Law') "
+            "- more specific than broad_category but still widely applicable\n"
             "- name (string): Specific domain name\n"
             "- parent_field (string): Parent field or discipline\n"
             "- description (string): What this domain covers (2-3 sentences)\n"
@@ -256,7 +291,8 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
         name="science_topic",
         display_name="Science Topics",
         fields=[
-            FieldSpec("name", "string", "Topic name"),
+            FieldSpec("broad_topic", "string", "Broad science topic (e.g. 'Particle Physics', 'Genetics', 'Climate Science')"),
+            FieldSpec("name", "string", "Specific topic name"),
             FieldSpec("scientific_field", "string", "Scientific field"),
             FieldSpec("subfield", "string", "Specific subfield"),
             FieldSpec("description", "string", "What this topic covers (2-3 sentences)"),
@@ -276,6 +312,8 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
             "{existing_samples}\n\n"
             "Return a JSON object with a single key \"samples\" containing an array of {k} objects. "
             "Each object must have these exact fields:\n"
+            "- broad_topic (string): Broad science topic (e.g. 'Particle Physics', 'Genetics', "
+            "'Climate Science') - applicable to many related specific topics\n"
             "- name (string): Specific topic name\n"
             "- scientific_field (string): Scientific field\n"
             "- subfield (string): Specific subfield\n"
@@ -287,34 +325,40 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
         name="language",
         display_name="Languages",
         fields=[
-            FieldSpec("name", "string", "Language name"),
+            FieldSpec("category", "string", "Broad language category (e.g. 'Business jargon', 'Youth slang', 'Academic discourse', 'Immigrant dialect')"),
+            FieldSpec("name", "string", "Language/variety name"),
             FieldSpec("region", "string", "Geographic region"),
             FieldSpec("register", "string", "Register (formal/informal/colloquial/technical/literary)"),
             FieldSpec("script", "string", "Writing script used"),
             FieldSpec("cultural_notes", "string", "Cultural context and usage notes (2-3 sentences)"),
         ],
         taxonomy_seed_prompt=(
-            "Generate a taxonomy of languages and linguistic varieties organized "
-            "by language family, geographic region, and sociolinguistic register. "
-            "Each leaf should be a very specific linguistic variety "
-            "(e.g. 'Shanghainese Wu Chinese as spoken by elderly residents in "
-            "the Old City district' not just 'Chinese')."
+            "Generate a taxonomy of language varieties and communication styles organized "
+            "by broad practical categories. Focus on broadly applicable categories like:\n"
+            "- Business jargon, Youth language, Academic discourse\n"
+            "- Immigrant dialects, Regional vernaculars, Professional terminology\n"
+            "- Digital communication styles, Literary registers\n\n"
+            "Each leaf should be a practical, broadly applicable language category "
+            "(e.g. 'Business jargon' or 'Chinese immigrant dialect' not "
+            "'Cerreto Laghi Resort-Dialect' or 'Litvish Yeshiva Key Hang Hebrew')."
         ),
         generation_prompt_template=(
-            "Generate {k} unique, highly specific language varieties that fit the category: {leaf_path}\n\n"
-            "Each entry must describe a specific linguistic variety with cultural context. "
-            "Avoid generic language entries.\n\n"
+            "Generate {k} unique language varieties that fit the category: {leaf_path}\n\n"
+            "Each entry must describe a practical, broadly applicable language variety. "
+            "Focus on categories useful for diverse text generation, not obscure dialects.\n\n"
             "Previously generated entries for this category (DO NOT repeat these):\n"
             "{existing_samples}\n\n"
             "Return a JSON object with a single key \"samples\" containing an array of {k} objects. "
             "Each object must have these exact fields:\n"
+            "- category (string): Broad language category (e.g. 'Business jargon', 'Youth slang', "
+            "'Academic discourse') - broadly applicable category\n"
             "- name (string): Language/variety name\n"
             "- region (string): Geographic region\n"
             "- register (string): Register (formal/informal/colloquial/technical/literary)\n"
             "- script (string): Writing script used\n"
             "- cultural_notes (string): Cultural context and usage notes (2-3 sentences)"
         ),
-        specificity_guidance="Each entry should describe a specific linguistic variety with its social context, not just a language name.",
+        specificity_guidance="Each entry should describe a practical language variety useful for text generation, not an obscure or hyper-specific dialect.",
     ),
     "reasoning_pattern": CategoryConfig(
         name="reasoning_pattern",
@@ -326,36 +370,40 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
             FieldSpec("when_to_use", "string", "When this pattern is most effective (1-2 sentences)"),
         ],
         taxonomy_seed_prompt=(
-            "Generate a taxonomy of reasoning and problem-solving patterns "
-            "organized by type (deductive, inductive, abductive, analogical, "
-            "heuristic, etc.), domain of application, and complexity level. "
-            "Each leaf should be a very specific reasoning approach "
-            "(e.g. 'counterfactual reasoning applied to causal inference in "
-            "epidemiological studies' not just 'logical reasoning')."
+            "Generate a taxonomy of general reasoning and problem-solving patterns. "
+            "Focus on broadly applicable reasoning techniques, NOT domain-specific scenarios.\n"
+            "Good examples: counterfactual reasoning, abductive reasoning, analogical reasoning, "
+            "proof by contradiction, divide and conquer, causal inference, Bayesian updating.\n"
+            "Bad examples: 'end-of-life ethical dilemma reasoning', 'epidemiological study design' "
+            "(these are scenarios, not reasoning patterns).\n\n"
+            "Organize by reasoning type (deductive, inductive, abductive, analogical, heuristic, "
+            "probabilistic, etc.) and complexity level."
         ),
         generation_prompt_template=(
-            "Generate {k} unique, highly specific reasoning patterns that fit the category: {leaf_path}\n\n"
-            "Each pattern must describe a specific cognitive or analytical approach. "
-            "Avoid generic reasoning categories.\n\n"
+            "Generate {k} unique, general-purpose reasoning patterns that fit the category: {leaf_path}\n\n"
+            "Each pattern must describe a general cognitive or analytical approach that can be applied "
+            "across many domains. Do NOT tie patterns to specific domains or scenarios.\n\n"
             "Previously generated patterns for this category (DO NOT repeat these):\n"
             "{existing_samples}\n\n"
             "Return a JSON object with a single key \"samples\" containing an array of {k} objects. "
             "Each object must have these exact fields:\n"
-            "- name (string): Specific pattern name\n"
+            "- name (string): General pattern name (e.g. 'Counterfactual Reasoning', not 'Epidemiological Counterfactual Analysis')\n"
             "- category (string): Category of reasoning\n"
-            "- description (string): How this pattern works (2-3 sentences)\n"
+            "- description (string): How this pattern works in general (2-3 sentences)\n"
             "- when_to_use (string): When this pattern is most effective (1-2 sentences)"
         ),
-        specificity_guidance="Each pattern should describe a specific reasoning technique with clear application context.",
+        specificity_guidance="Each pattern should be a general reasoning technique applicable across many domains, not tied to a specific scenario.",
     ),
     "emotional_state": CategoryConfig(
         name="emotional_state",
         display_name="Emotional States",
         fields=[
-            FieldSpec("name", "string", "Name of the emotional state"),
+            FieldSpec("category", "string", "Broad emotion category (e.g. 'Hopefulness', 'Frustration', 'Grief', 'Excitement')"),
+            FieldSpec("name", "string", "Specific name for this emotional state"),
             FieldSpec("intensity", "string", "Intensity level (subtle/mild/moderate/strong/overwhelming)"),
             FieldSpec("valence", "string", "Emotional valence (positive/negative/mixed/neutral)"),
             FieldSpec("behavioral_description", "string", "How this state manifests in behavior (2-3 sentences)"),
+            FieldSpec("example", "string", "An example situation or scenario where this emotional state commonly occurs"),
         ],
         taxonomy_seed_prompt=(
             "Generate a taxonomy of emotional states organized by valence "
@@ -373,10 +421,13 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
             "{existing_samples}\n\n"
             "Return a JSON object with a single key \"samples\" containing an array of {k} objects. "
             "Each object must have these exact fields:\n"
+            "- category (string): Broad emotion category (e.g. 'Hopefulness', 'Frustration', 'Grief') - "
+            "a simple, high-level emotion family\n"
             "- name (string): Specific name for this emotional state\n"
             "- intensity (string): one of subtle/mild/moderate/strong/overwhelming\n"
             "- valence (string): one of positive/negative/mixed/neutral\n"
-            "- behavioral_description (string): How this state manifests in behavior (2-3 sentences)"
+            "- behavioral_description (string): How this state manifests in behavior (2-3 sentences)\n"
+            "- example (string): A concrete example situation or scenario where this emotional state commonly occurs"
         ),
         specificity_guidance="Each state should be a nuanced emotional experience, not a basic emotion label.",
     ),
@@ -384,33 +435,41 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
         name="instruction_complexity",
         display_name="Instruction Complexity",
         fields=[
+            FieldSpec("name", "string", "Short name for this instruction complexity type (e.g. 'Multi-step with implicit constraints', 'Contradictory requirements')"),
             FieldSpec("level", "string", "Complexity level (simple/moderate/complex/expert/ambiguous)"),
             FieldSpec("ambiguity", "string", "Ambiguity level (none/low/moderate/high/contradictory)"),
-            FieldSpec("description", "string", "What makes this instruction complex (2-3 sentences)"),
+            FieldSpec("description", "string", "What makes this type of instruction complex (2-3 sentences). Must be generic and not tied to any specific domain or scenario."),
             FieldSpec("example", "string", "A concrete example instruction at this complexity level"),
         ],
         taxonomy_seed_prompt=(
-            "Generate a taxonomy of instruction types organized by complexity "
-            "dimension (structural, conceptual, ambiguity, constraint density), "
-            "domain, and specific challenge type. Each leaf should be a very "
-            "specific type of instruction (e.g. 'multi-step data pipeline "
-            "specification with implicit ordering constraints and unstated "
-            "error handling requirements' not just 'complex instruction')."
+            "Generate a taxonomy of instruction complexity types organized by the "
+            "NATURE of the complexity, NOT by domain.\n\n"
+            "Good complexity dimensions:\n"
+            "- Structural: multi-step, nested conditions, ordering dependencies\n"
+            "- Ambiguity: vague requirements, implicit assumptions, contradictions\n"
+            "- Constraint: conflicting constraints, hidden constraints, optimization trade-offs\n"
+            "- Scope: underspecified scope, shifting requirements, meta-instructions\n"
+            "- Communication: indirect requests, implied context, cultural assumptions\n\n"
+            "Each leaf should describe a TYPE of instruction complexity, not a specific scenario.\n"
+            "Good: 'Multi-step instructions with implicit ordering constraints'\n"
+            "Bad: 'QoS configuration for network interfaces' (this is a scenario, not a complexity type)"
         ),
         generation_prompt_template=(
-            "Generate {k} unique, highly specific instruction complexity examples that fit the category: {leaf_path}\n\n"
-            "Each entry must demonstrate a specific type of instruction complexity. "
-            "Avoid generic complexity descriptions.\n\n"
+            "Generate {k} unique instruction complexity types that fit the category: {leaf_path}\n\n"
+            "Each entry must describe a GENERIC type of instruction complexity that could apply to "
+            "ANY domain. The description should be about what makes this type of instruction complex, "
+            "not about a specific task or scenario. The example can be domain-specific to illustrate.\n\n"
             "Previously generated examples for this category (DO NOT repeat these):\n"
             "{existing_samples}\n\n"
             "Return a JSON object with a single key \"samples\" containing an array of {k} objects. "
             "Each object must have these exact fields:\n"
+            "- name (string): Short descriptive name for this complexity type\n"
             "- level (string): one of simple/moderate/complex/expert/ambiguous\n"
             "- ambiguity (string): one of none/low/moderate/high/contradictory\n"
-            "- description (string): What makes this instruction complex (2-3 sentences)\n"
+            "- description (string): What makes this type of instruction complex (2-3 sentences, generic, not domain-specific)\n"
             "- example (string): A concrete example instruction at this complexity level"
         ),
-        specificity_guidance="Each entry should show a specific, realistic instruction that demonstrates the complexity type.",
+        specificity_guidance="Each entry should describe a generic instruction complexity type applicable to any domain, not a domain-specific scenario.",
     ),
     "tool_group": CategoryConfig(
         name="tool_group",

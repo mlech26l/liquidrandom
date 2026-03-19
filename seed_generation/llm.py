@@ -84,6 +84,9 @@ async def llm_call(
 
         except Exception as e:
             last_error = e
+            # Don't retry on 400 errors (bad request, content moderation, etc.)
+            if hasattr(e, "status_code") and e.status_code == 400:
+                break
             if attempt < max_retries - 1:
                 wait = 2 ** (attempt + 1)
                 await asyncio.sleep(wait)

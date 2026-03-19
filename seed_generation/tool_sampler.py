@@ -76,8 +76,16 @@ GROUP_GENERATION_PROMPT = """\
 Generate {k} groups of related LLM tools/functions for the domain: {leaf_path}
 
 Each group represents a coherent set of 3-6 related API functions that an AI agent \
-would use together. Tools within a group should have inter-dependencies \
-(the return type of one tool should be an input to another).
+would use together. Tools within a group MUST have inter-dependencies \
+(the return type of one tool should be usable as input to another).
+
+IMPORTANT: Aim for diverse tool counts across groups. Generate some groups with 3, \
+some with 4, some with 5, and some with 6 tools. Do NOT default to always using 3-4 tools.
+
+CRITICAL: Ensure interface compatibility across all tools in the group. When tool A returns \
+a field (e.g. "flight_id" of type "string"), any tool B that needs that value as input \
+MUST use the SAME field name and type. Mismatched interfaces (e.g. tool A returns \
+"flight_id:uuid" but tool B expects "flight_number:int") are not acceptable.
 
 Use OpenAI function calling format for parameters and returns:
 - parameters: {{"type": "object", "properties": {{...}}, "required": [...]}}
@@ -102,62 +110,121 @@ Each object must have:
 - tools (array): 3-6 tool objects each with canonical_name, description, and variations"""
 
 
-VARIATION_GENERATION_PROMPT = """\
-Generate a new parameter variation for the tool function "{tool_name}".
+GROUP_VARIATION_PROMPT = """\
+Generate a complete new parameter variation for ALL tools in this group simultaneously.
 
-Original tool description: {tool_description}
-Domain context: {domain}
+Domain: {domain}
+Description: {group_description}
 
-The variation should differ from existing variations in:
-- Parameter names (e.g. "departure_date" vs "travel_date" vs "date_of_departure")
-- Parameter types (e.g. string date vs integer timestamp vs object with day/month/year)
-- Granularity (e.g. single "address" string vs structured address object)
-- Optional vs required fields
-- Nesting structure (flat vs deeply nested)
+Current tools and their canonical (v0) interfaces:
+{canonical_tools}
 
-But the variation must serve the SAME semantic purpose as the original function.
-
-Existing variations (generate something DIFFERENT from all of these):
+Existing group variations (generate something DIFFERENT from all of these):
 {existing_variations}
 
-Return a JSON object with:
-- name (string): snake_case function name (a plausible alternative name)
-- description (string): what the function does (rephrased)
-- parameters (object): OpenAI JSON Schema format {{"type": "object", "properties": {{...}}, "required": [...]}}
-- returns (object): OpenAI JSON Schema format {{"type": "object", "properties": {{...}}}}"""
+CRITICAL REQUIREMENTS:
+1. Generate a variation for EVERY tool in the group at once (not independently per tool).
+2. All tools in this variation MUST have compatible interfaces with each other:
+   - If tool A's return includes "order_id" (string), then any tool B that needs it as input \
+MUST accept "order_id" (string) with the SAME name and type.
+   - All cross-tool references must match exactly.
+3. Each variation should differ from existing ones in parameter/return naming, types, \
+granularity, or structure, but maintain the same semantic purpose.
+4. Use plausible alternative function names (snake_case).
+
+Return a JSON object with a single key "tools" containing an array of objects, \
+one per tool in the same order as above. Each object must have:
+- canonical_name (string): the original canonical_name (unchanged, for matching)
+- variation (object): the new variation with name, description, parameters, returns"""
 
 
-async def _generate_variations_for_tool(
+async def _generate_group_variation(
     client: AsyncOpenAI,
-    tool: dict[str, Any],
-    domain: str,
-    m: int,
-) -> list[dict[str, Any]]:
-    """Generate M-1 additional variations for a single tool (sequential, context-dependent)."""
-    variations = list(tool.get("variations", []))
-    if not variations:
+    group: dict[str, Any],
+    existing_group_variations: list[list[dict[str, Any]]],
+) -> list[dict[str, Any]] | None:
+    """Generate one complete group-level variation (all tools at once).
+
+    Returns a list of variation dicts (one per tool), or None on failure.
+    """
+    tools = group.get("tools", [])
+    if not tools:
+        return None
+
+    # Format canonical tools for the prompt
+    canonical_text = ""
+    for i, tool in enumerate(tools):
+        canonical_text += f"\nTool {i + 1}: {tool['canonical_name']}\n"
+        canonical_text += f"  Description: {tool['description']}\n"
+        v0 = tool.get("variations", [{}])[0] if tool.get("variations") else {}
+        if v0:
+            canonical_text += f"  Parameters: {json.dumps(v0.get('parameters', {}))}\n"
+            canonical_text += f"  Returns: {json.dumps(v0.get('returns', {}))}\n"
+
+    # Format existing variations
+    existing_text = "None yet." if not existing_group_variations else ""
+    for vi, var_set in enumerate(existing_group_variations):
+        existing_text += f"\n--- Variation {vi + 1} ---\n"
+        for tool_var in var_set:
+            existing_text += f"  {tool_var.get('name', '?')}: params={json.dumps(tool_var.get('parameters', {}))}\n"
+
+    prompt = GROUP_VARIATION_PROMPT.format(
+        domain=group["domain"],
+        group_description=group["description"],
+        canonical_tools=canonical_text,
+        existing_variations=existing_text,
+    )
+
+    try:
+        result = await llm_call(client, [{"role": "user", "content": prompt}])
+        if not isinstance(result, dict):
+            return None
+        tool_variations = result.get("tools", [])
+        if len(tool_variations) != len(tools):
+            return None
+
+        # Extract the variation for each tool
+        variations: list[dict[str, Any]] = []
+        for tv in tool_variations:
+            var = tv.get("variation", tv)
+            if not isinstance(var, dict) or "name" not in var:
+                return None
+            variations.append(var)
+
         return variations
+    except Exception as e:
+        console.print(f"    [red]Group variation generation failed: {e}[/red]")
+        return None
+
+
+async def _generate_variations_for_group(
+    client: AsyncOpenAI,
+    group: dict[str, Any],
+    m: int,
+) -> None:
+    """Generate M-1 additional group-level variations (sequential, context-dependent).
+
+    Modifies group["tools"] in place, adding variations to each tool.
+    """
+    tools = group.get("tools", [])
+    if not tools:
+        return
+
+    # Track all generated group variations for context
+    existing_group_variations: list[list[dict[str, Any]]] = []
 
     for _ in range(m - 1):
-        existing_text = json.dumps(variations, indent=2)
-        prompt = VARIATION_GENERATION_PROMPT.format(
-            tool_name=tool["canonical_name"],
-            tool_description=tool["description"],
-            domain=domain,
-            existing_variations=existing_text,
+        variation_set = await _generate_group_variation(
+            client, group, existing_group_variations
         )
 
-        try:
-            result = await llm_call(client, [{"role": "user", "content": prompt}])
-            if isinstance(result, dict) and "name" in result:
-                variations.append(result)
-        except Exception as e:
-            console.print(
-                f"    [red]Variation generation failed for "
-                f"{tool['canonical_name']}: {e}[/red]"
-            )
-
-    return variations
+        if variation_set and len(variation_set) == len(tools):
+            existing_group_variations.append(variation_set)
+            # Append each tool's variation to its variations list
+            for tool, var in zip(tools, variation_set):
+                if "variations" not in tool:
+                    tool["variations"] = []
+                tool["variations"].append(var)
 
 
 async def _generate_for_leaf(
@@ -202,7 +269,7 @@ async def _generate_for_leaf(
             if not raw_groups:
                 continue
 
-            # Phase C: Validate groups
+            # Phase C: Validate groups (before variations, to avoid wasting LLM calls)
             async with batch_semaphore:
                 accepted = await validate_tool_groups(
                     client, raw_groups, leaf_path_str
@@ -211,19 +278,9 @@ async def _generate_for_leaf(
             if not accepted:
                 continue
 
-            # Phase B: Generate variations for each tool in accepted groups
+            # Phase B: Generate group-level variations (sequential per group)
             for group in accepted:
-                tools = group.get("tools", [])
-                variation_tasks = [
-                    _generate_variations_for_tool(client, tool, group["domain"], m)
-                    for tool in tools
-                ]
-                variation_results = await asyncio.gather(
-                    *variation_tasks, return_exceptions=True
-                )
-                for tool, var_result in zip(tools, variation_results):
-                    if isinstance(var_result, list):
-                        tool["variations"] = var_result
+                await _generate_variations_for_group(client, group, m)
 
             # Convert to storage format (tools_json string)
             storage_groups: list[dict[str, Any]] = []

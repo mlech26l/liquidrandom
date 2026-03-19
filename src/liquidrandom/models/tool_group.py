@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
+
+from liquidrandom._detail import DetailLevel
 
 
 @dataclass(frozen=True)
@@ -64,6 +66,11 @@ class ToolGroup:
     taxonomy_path: str
     tools: list[ToolFunction]
 
+    _field_groups: ClassVar[dict[str, tuple[str, ...]]] = {
+        "high_level": ("domain", "description", "taxonomy_path", "tools"),
+        "detailed": (),
+    }
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ToolGroup:
         tools_raw = data.get("tools_json") or data.get("tools")
@@ -78,7 +85,7 @@ class ToolGroup:
             tools=tools,
         )
 
-    def __str__(self) -> str:
+    def to_str(self, detail: DetailLevel = DetailLevel.DETAILED) -> str:
         tool_names = ", ".join(t.canonical_name for t in self.tools)
         total_variations = sum(len(t.variations) for t in self.tools)
         return (
@@ -87,3 +94,12 @@ class ToolGroup:
             f"Tools ({len(self.tools)}): {tool_names}\n"
             f"Total variations: {total_variations}"
         )
+
+    def brief(self) -> str:
+        return self.to_str(DetailLevel.HIGH_LEVEL)
+
+    def detailed(self) -> str:
+        return self.to_str(DetailLevel.DETAILED)
+
+    def __str__(self) -> str:
+        return self.detailed()

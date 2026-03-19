@@ -115,28 +115,32 @@ python generate.py upload-only --repo-id mlech26l/liquidrandom-data
 
 ## Categories (12)
 
-| Category | Model | Key Fields |
-|---|---|---|
-| persona | Persona | name, age, gender, occupation, nationality, personality_traits, background |
-| job | Job | title, industry, description, required_skills, experience_level |
-| coding_task | CodingTask | title, language, difficulty, description, constraints, expected_behavior |
-| math_category | MathCategory | name, field, description, example_problems |
-| writing_style | WritingStyle | name, tone, characteristics, description |
-| scenario | Scenario | title, context, setting, stakes, description |
-| domain | Domain | name, parent_field, description, key_concepts |
-| science_topic | ScienceTopic | name, scientific_field, subfield, description |
-| language | Language | name, region, register, script, cultural_notes |
-| reasoning_pattern | ReasoningPattern | name, category, description, when_to_use |
-| emotional_state | EmotionalState | name, intensity, valence, behavioral_description |
-| instruction_complexity | InstructionComplexity | level, ambiguity, description, example |
+Each model supports `to_str(detail)` with `DetailLevel.HIGH_LEVEL` or `DetailLevel.DETAILED` (default). Fields marked **[H]** are high-level, **[D]** are detailed, **[M]** are manual-only (attribute access only, not in any `__str__`).
+
+| Category | Model | High-Level Fields | Detailed Fields | Manual Fields |
+|---|---|---|---|---|
+| persona | Persona | name, age, gender, occupation, nationality | personality_traits, background | |
+| job | Job | job_category, sector, experience_level | title, industry, description, required_skills | |
+| coding_task | CodingTask | title, language, difficulty | description, constraints, expected_behavior | follow_up_task, change_request, edge_cases |
+| math_category | MathCategory | broad_topic, field | name, description, example_problems | |
+| writing_style | WritingStyle | category, tone | name, characteristics, description | |
+| scenario | Scenario | broad_title, theme, setting | title, context, stakes, description | |
+| domain | Domain | broad_category, area | name, parent_field, description, key_concepts | |
+| science_topic | ScienceTopic | broad_topic, scientific_field | name, subfield, description | |
+| language | Language | category, register | name, region, script, cultural_notes | |
+| reasoning_pattern | ReasoningPattern | name, category | description, when_to_use | |
+| emotional_state | EmotionalState | category, intensity, valence | name, behavioral_description, example | |
+| instruction_complexity | InstructionComplexity | name, level, ambiguity | description, example | |
 
 ## Package Usage
 
 ```python
 import liquidrandom
+from liquidrandom import DetailLevel
 
 persona = liquidrandom.persona()    # Returns Persona dataclass
 job = liquidrandom.job()            # Returns Job dataclass
-print(persona)                      # LLM-prompt-friendly string
+print(persona)                      # Detailed output (default)
+print(persona.to_str(DetailLevel.HIGH_LEVEL))  # High-level output
 print(persona.name)                 # Access individual fields
 ```

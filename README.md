@@ -20,31 +20,74 @@ import liquidrandom
 # Get a random persona to inject into your LLM prompt
 persona = liquidrandom.persona()
 print(persona)
-# Alice is a 30-year-old female from Canada. They work as an engineer. ...
+# Alice is a 30-year-old female from Canada. They work as an engineer. Personality traits: curious, patient. Background: Grew up in Toronto ...
+
+# High-level output (fewer fields, broader)
+print(persona.brief())
+# Alice is a 30-year-old female from Canada. They work as an engineer.
 
 # Get a random coding task
 task = liquidrandom.coding_task()
 print(task)
 # [Python, medium] Implement a trie: Build a trie data structure ...
+
+# Access manual-only fields directly
+print(task.follow_up_task)   # "Add autocomplete functionality"
+print(task.change_request)   # "Support case-insensitive search"
+print(task.edge_cases)       # ["empty string input", "unicode characters"]
 ```
 
 ## 📋 Available Categories
 
-| Function | Returns | Description |
-|---|---|---|
-| `liquidrandom.persona()` | `Persona` | 🧑 Random personas with name, age, gender, occupation, nationality, personality traits, background |
-| `liquidrandom.job()` | `Job` | 💼 Professions with title, industry, description, required skills, experience level |
-| `liquidrandom.coding_task()` | `CodingTask` | 💻 Programming challenges with title, language, difficulty, description, constraints, expected behavior |
-| `liquidrandom.math_category()` | `MathCategory` | 🔢 Math categories with name, field, description, example problems |
-| `liquidrandom.writing_style()` | `WritingStyle` | ✍️ Writing styles with name, tone, characteristics, description |
-| `liquidrandom.scenario()` | `Scenario` | 🎬 Real-world scenarios with title, context, setting, stakes, description |
-| `liquidrandom.domain()` | `Domain` | 🌐 Knowledge domains with name, parent field, description, key concepts |
-| `liquidrandom.science_topic()` | `ScienceTopic` | 🔬 Scientific topics with name, field, subfield, description |
-| `liquidrandom.language()` | `Language` | 🌍 Languages/locales with name, region, register, script, cultural notes |
-| `liquidrandom.reasoning_pattern()` | `ReasoningPattern` | 🧠 Reasoning approaches with name, category, description, when to use |
-| `liquidrandom.emotional_state()` | `EmotionalState` | 💭 Emotional states with name, intensity, valence, behavioral description |
-| `liquidrandom.instruction_complexity()` | `InstructionComplexity` | 📐 Instruction complexity levels with level, ambiguity, description, example |
-| `liquidrandom.tool_group()` | `ToolGroup` | 🔧 Groups of related LLM tools/functions in OpenAI format, each with multiple parameter variations |
+Each category supports two detail levels:
+- **`str(x)`** / **`x.detailed()`**: All standard fields (default)
+- **`x.brief()`**: Only broad, summary-level fields
+
+Some models also have **manual-only fields** that are never included in string output but accessible as attributes.
+
+> **Tip:** When combining multiple seed data types in a single prompt, prefer `.brief()` for each. Brief outputs are more compatible with each other and less likely to overwhelm the prompt.
+
+| Function | Returns | High-Level Fields | Detailed Fields | Manual-Only Fields |
+|---|---|---|---|---|
+| `persona()` | `Persona` | name, age, gender, occupation, nationality | + personality_traits, background | |
+| `job()` | `Job` | job_category, sector, experience_level | + title, industry, description, required_skills | |
+| `coding_task()` | `CodingTask` | title, language, difficulty | + description, constraints, expected_behavior | follow_up_task, change_request, edge_cases |
+| `math_category()` | `MathCategory` | broad_topic, field | + name, description, example_problems | |
+| `writing_style()` | `WritingStyle` | category, tone | + name, characteristics, description | |
+| `scenario()` | `Scenario` | broad_title, theme, setting | + title, context, stakes, description | |
+| `domain()` | `Domain` | broad_category, area | + name, parent_field, description, key_concepts | |
+| `science_topic()` | `ScienceTopic` | broad_topic, scientific_field | + name, subfield, description | |
+| `language()` | `Language` | category, register | + name, region, script, cultural_notes | |
+| `reasoning_pattern()` | `ReasoningPattern` | name, category | + description, when_to_use | |
+| `emotional_state()` | `EmotionalState` | category, intensity, valence | + name, behavioral_description, example | |
+| `instruction_complexity()` | `InstructionComplexity` | name, level, ambiguity | + description, example | |
+| `tool_group()` | `ToolGroup` | domain, description, taxonomy_path, tools | (same) | |
+
+### 📝 Per-Category Usage Notes
+
+**Personas** -- Use `.brief()` as the default. The brief version provides enough context (name, age, occupation, nationality) to steer generation without overwhelming the prompt.
+
+**Jobs** -- Use `.brief()` as the default. Similar to personas, the broad job category and sector are usually sufficient.
+
+**Coding Tasks** -- Use `.detailed()` (the default). The brief version is not specific enough to serve as a coding specification. Use the manual-only fields (`follow_up_task`, `change_request`, `edge_cases`) for multi-turn coding scenarios.
+
+**Math Categories** -- Be aware of the wide gap between `.brief()` and `.detailed()`. Brief gives only the broad topic and field; detailed adds the specific topic name, description, and example problems.
+
+**Writing Styles** -- Good as-is at both levels. No special considerations.
+
+**Scenarios** -- Use `.brief()` as the default. The brief version already includes a descriptive title, theme, and setting.
+
+**Domains** -- Be aware of the wide gap between `.brief()` and `.detailed()`. Brief gives only the broad category and area; detailed adds the specific domain name, parent field, and key concepts.
+
+**Science Topics** -- Be aware of the wide gap between `.brief()` and `.detailed()`. Brief gives only the broad topic and field.
+
+**Languages** -- Use `.brief()` only. The detailed version contains overly specific dialect/variant information that is rarely useful.
+
+**Reasoning Patterns** -- Small curated list (~250 items). Best used in conjunction with other seed data types or your own randomization, not as a standalone source. Covers general-purpose reasoning techniques (counterfactual, abductive, analogical, etc.).
+
+**Emotional States** -- Use `.brief()` as the default. The detailed version is very specific, but the `example` field in it provides valuable situational context if needed.
+
+**Instruction Complexity** -- Small curated list (~250 items). Best used in conjunction with other seed data types. Covers instruction styles like "explain like I'm 5", "step by step", "first principles", etc.
 
 ## 🛠️ Usage Example
 
@@ -63,8 +106,9 @@ persona = liquidrandom.persona()
 style = liquidrandom.writing_style()
 topic = liquidrandom.science_topic()
 
-prompt = f"""You are {persona}
-Write in the following style: {style}
+# Use brief output for concise prompts
+prompt = f"""You are {persona.brief()}
+Write in the following style: {style.brief()}
 Explain the following topic: {topic}"""
 
 response = client.chat.completions.create(
@@ -78,8 +122,12 @@ Each call to a `liquidrandom` function returns a typed dataclass. You can use th
 ```python
 persona = liquidrandom.persona()
 print(persona.name)               # "Alice"
-print(persona.age)                 # 30
+print(persona.age)                # 30
 print(persona.personality_traits)  # ["curious", "patient"]
+
+# Control detail level
+print(persona.brief())     # Broad overview
+print(persona.detailed())  # Full details (same as str())
 ```
 
 ## ⚙️ How It Works
@@ -191,14 +239,14 @@ Each tool has 8 parameter variations, e.g. for simulate_restore_impact:
 
 ### 🔧 Tool Groups: Usage Notes
 
-Tool groups provide sets of related LLM tool/function definitions in OpenAI function calling format, each with 8 parameter variations. They are useful for testing agentic workflows against diverse tool signatures.
+Tool groups provide sets of related LLM tool/function definitions in OpenAI function calling format, each with multiple parameter variations. They are useful for testing agentic workflows against diverse tool signatures.
 
 ```python
 import liquidrandom
 
 group = liquidrandom.tool_group()
 print(group.domain)        # "Cloud Object Versioning and History Retrieval"
-print(len(group.tools))    # 3-5 tools per group
+print(len(group.tools))    # 3-6 tools per group
 
 for tool in group.tools:
     print(tool.canonical_name)        # "search_flights"
@@ -209,15 +257,11 @@ for tool in group.tools:
         print(var.returns)            # OpenAI JSON Schema dict
 ```
 
-**Known limitations:**
+**Important notes:**
 
-- **Low tool count diversity.** ~62% of groups have 3 tools, ~37% have 4, and only ~1% have 5. If your use case is sensitive to tool count, consider sampling multiple groups and combining or dropping tools to get a wider distribution.
-- **Cross-variation interface drift.** The canonical (v0) tools within a group have coherent inter-tool interfaces (e.g. tool A's return value matches tool B's input). However, variations were generated independently per tool, so variation N of tool A may not perfectly align with variation N of tool B (e.g. differently named keys or slightly different semantics). This is fine for testing individual tool signatures but may cause inconsistencies if you mix-and-match variation indices across tools within a group.
-
-## TODO / Future Improvements
-
-- **Tool group cross-variation alignment.** Currently, variations for each tool within a group are generated independently. This means variation N of tool A and variation N of tool B have no guaranteed interface compatibility (matching parameter/return names). A future improvement would be to generate variations at the group level rather than per-tool, ensuring that all tools in a variation set have coherent inter-tool interfaces.
-- **Over-specificity in some categories.** Some seed data types have far more samples than needed for good diversity coverage. In particular, `language` (~22k samples) and `writing_style` (~25k samples) are over-specified, containing highly niche entries (e.g. obscure professional terminologies, hyper-specific literary styles) that are unlikely to be useful for most generation pipelines. These categories would benefit from being regenerated with a shallower taxonomy (1-2 levels) and a much smaller target count (~500 samples) focused on broad, practical coverage. Most other categories (e.g. `job`, `persona`, `coding_task`) benefit from their large sample counts and are fine as-is.
+- **Variation compatibility.** Tool variations are compatible *within* the same variation index but *not across* indices. For example, tool A variation 1 is interface-compatible with tool B variation 1, but tool A variation 1 is NOT compatible with tool B variation 2. When selecting a variation, use the same index for all tools in the group.
+- **Group size is 3-6 tools.** If you need more tools (e.g., 10+), sample multiple tool groups and combine them. Tools from different groups are independent and can be freely mixed.
+- Tools with an empty variation list may occur occasionally; check and skip if needed.
 
 ## 📄 License
 

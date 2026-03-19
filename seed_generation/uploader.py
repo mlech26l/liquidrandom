@@ -17,12 +17,43 @@ from categories import CATEGORY_CONFIGS
 
 console = Console()
 
+# Categories that use pre-built parquet files instead of JSONL consolidation.
+# Maps category name to the module attribute containing the hardcoded data list.
+_HARDCODED_CATEGORIES: dict[str, tuple[str, str]] = {
+    "reasoning_pattern": ("hardcoded_reasoning_patterns", "REASONING_PATTERNS"),
+    "instruction_complexity": ("hardcoded_instruction_complexities", "INSTRUCTION_COMPLEXITIES"),
+}
+
+
+def _build_hardcoded_parquet(category_name: str, dest_dir: Path) -> int:
+    """Build a parquet file from a hardcoded Python list.
+
+    Returns the number of samples written.
+    """
+    module_name, attr_name = _HARDCODED_CATEGORIES[category_name]
+    import importlib
+    module = importlib.import_module(module_name)
+    data: list[dict[str, Any]] = getattr(module, attr_name)
+
+    if not data:
+        return 0
+
+    table = pa.Table.from_pylist(data)
+    output_path = dest_dir / f"{category_name}.parquet"
+    pq.write_table(table, output_path, compression="zstd")
+
+    return len(data)
+
 
 def _consolidate_category(output_dir: str, category_name: str, dest_dir: Path) -> int:
     """Consolidate all per-leaf JSONL files into a single category Parquet file.
 
     Returns the number of samples consolidated.
     """
+    # Use hardcoded data if available for this category
+    if category_name in _HARDCODED_CATEGORIES:
+        return _build_hardcoded_parquet(category_name, dest_dir)
+
     samples_dir = Path(output_dir) / "samples" / category_name
     if not samples_dir.exists():
         return 0

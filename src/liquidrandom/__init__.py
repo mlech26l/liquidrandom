@@ -7,6 +7,7 @@ import random
 from liquidrandom._loader import load_category
 from liquidrandom.models import (
     CodingTask,
+    DetailLevel,
     Domain,
     EmotionalState,
     InstructionComplexity,
@@ -25,6 +26,7 @@ from liquidrandom.models import (
 
 __all__ = [
     "CodingTask",
+    "DetailLevel",
     "Domain",
     "EmotionalState",
     "InstructionComplexity",

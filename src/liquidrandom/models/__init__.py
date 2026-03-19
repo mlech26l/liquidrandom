@@ -1,3 +1,4 @@
+from liquidrandom._detail import DetailLevel
 from liquidrandom.models.coding_task import CodingTask
 from liquidrandom.models.domain import Domain
 from liquidrandom.models.emotional_state import EmotionalState
@@ -14,6 +15,7 @@ from liquidrandom.models.writing_style import WritingStyle
 
 __all__ = [
     "CodingTask",
+    "DetailLevel",
     "Domain",
     "EmotionalState",
     "InstructionComplexity",
