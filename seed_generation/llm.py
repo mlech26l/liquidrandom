@@ -58,6 +58,7 @@ async def llm_call(
     *,
     use_reasoning: bool = True,
     max_retries: int = 3,
+    model: str | None = None,
 ) -> dict[str, Any] | list[Any]:
     """Make an LLM call with retries and JSON parsing.
 
@@ -71,7 +72,7 @@ async def llm_call(
                 extra_body["reasoning"] = {"enabled": True}
 
             response = await client.chat.completions.create(
-                model=MODEL_NAME,
+                model=model or MODEL_NAME,
                 messages=messages,
                 extra_body=extra_body if extra_body else None,
             )

@@ -61,7 +61,8 @@ Some models also have **manual-only fields** that are never included in string o
 | `reasoning_pattern()` | `ReasoningPattern` | name, category | + description, when_to_use | |
 | `emotional_state()` | `EmotionalState` | category, intensity, valence | + name, behavioral_description, example | |
 | `instruction_complexity()` | `InstructionComplexity` | name, level, ambiguity | + description, example | |
-| `tool_group()` | `ToolGroup` | domain, description, taxonomy_path, tools | (same) | |
+| `tool_group()` | `ToolGroup` | domain, description, taxonomy_path, kind, tools | (same) | Unified pool (`kind`: `"default"` SaaS, `"physical"` embodied) |
+| `physical_tool_group()` | `ToolGroup` | same | (same) | Convenience filter: `tool_group()` constrained to `kind == "physical"` |
 
 ### 📝 Per-Category Usage Notes
 
@@ -262,6 +263,7 @@ for tool in group.tools:
 - **Variation compatibility.** Tool variations are compatible *within* the same variation index but *not across* indices. For example, tool A variation 1 is interface-compatible with tool B variation 1, but tool A variation 1 is NOT compatible with tool B variation 2. When selecting a variation, use the same index for all tools in the group.
 - **Group size is 3-6 tools.** If you need more tools (e.g., 10+), sample multiple tool groups and combine them. Tools from different groups are independent and can be freely mixed.
 - Tools with an empty variation list may occur occasionally; check and skip if needed.
+- **`kind` discriminator.** Each `ToolGroup` carries a `kind` field: `"default"` for SaaS/cloud-style tools, `"physical"` for embodied/physical-AI tools (smart home voice assistants, mobile/manipulator/humanoid robots, autonomous vehicles, drones, industrial automation, agricultural/medical robotics, wearable AI). `liquidrandom.tool_group()` draws from the full pool; `liquidrandom.physical_tool_group()` is a convenience filter equivalent to sampling until `kind == "physical"`.
 
 ## 📄 License
 

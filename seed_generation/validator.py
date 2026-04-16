@@ -15,6 +15,7 @@ async def validate_batch(
     samples: list[dict[str, Any]],
     category: CategoryConfig,
     leaf_path: str,
+    model: str | None = None,
 ) -> list[dict[str, Any]]:
     """Validate a batch of samples using the LLM.
 
@@ -52,7 +53,7 @@ async def validate_batch(
         }
     ]
 
-    result = await llm_call(client, messages)
+    result = await llm_call(client, messages, model=model)
 
     if isinstance(result, dict):
         verdicts = result.get("verdicts", [])

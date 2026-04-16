@@ -503,4 +503,44 @@ CATEGORY_CONFIGS: dict[str, CategoryConfig] = {
         generation_prompt_template="",  # Not used; tool_sampler has its own prompts
         specificity_guidance="Each tool group should represent a coherent set of related API functions with inter-tool dependencies.",
     ),
+    "physical_tool_group": CategoryConfig(
+        name="physical_tool_group",
+        display_name="Physical-AI Tool Groups",
+        fields=[
+            FieldSpec("domain", "string", "Tool group domain (e.g. 'Smart Home Lighting Control')"),
+            FieldSpec("description", "string", "What this tool group does"),
+            FieldSpec("taxonomy_path", "string", "Taxonomy path this group belongs to"),
+            FieldSpec("tools_json", "string", "JSON-serialized list of ToolFunction dicts"),
+        ],
+        taxonomy_seed_prompt=(
+            "Generate a taxonomy of tool/function calling domains for PHYSICAL and EMBODIED "
+            "AI systems (not SaaS or cloud APIs). These represent groups of related tools that "
+            "an embodied agent — a voice assistant, robot, vehicle, or wearable AI — would use "
+            "together to sense, act on, and reason about the physical world.\n\n"
+            "Root categories:\n"
+            "- Smart Home Voice Assistants (lighting, climate, security, appliances, media & entertainment)\n"
+            "- Mobile Service Robots (indoor delivery, floor cleaning, facility inspection)\n"
+            "- Manipulator Robots (arm control, grasping, assembly, pick-and-place, sorting)\n"
+            "- Humanoid Robots (bipedal locomotion, whole-body manipulation, human interaction)\n"
+            "- Autonomous Vehicles (perception, motion planning, vehicle control, V2X communication)\n"
+            "- Sidewalk & Last-Mile Delivery Robots (navigation, obstacle handling, handoff)\n"
+            "- Aerial Drones (mission planning, inspection, cinematography, precision agriculture)\n"
+            "- Underwater & Marine Robots (ROV/AUV operations, bathymetric mapping)\n"
+            "- Industrial & Factory Automation (robotic cells, AMRs, conveyor & PLC control)\n"
+            "- Agricultural Robotics (field navigation, harvesting, targeted spraying)\n"
+            "- Medical & Surgical Robots (teleoperation, imaging-guided intervention)\n"
+            "- Wearable & Personal AI (AR glasses assistants, smart earbuds, fitness devices)\n\n"
+            "Each leaf should be a specific embodied tool domain (e.g. 'Quadruped locomotion "
+            "gait switching on uneven terrain', not just 'robotics'). Focus on real physical "
+            "capabilities: sensing, actuation, state estimation, planning, safety — NOT cloud "
+            "services, databases, or web APIs."
+        ),
+        generation_prompt_template="",  # Not used; tool_sampler has its own prompts
+        specificity_guidance=(
+            "Each tool group should represent a coherent set of physical-world capabilities "
+            "(sensing + actuation + state) that an embodied AI agent would use together, with "
+            "inter-tool state/data dependencies (e.g. a pose returned by a localization tool is "
+            "consumed by a navigation tool, or a detected object handle flows into a grasp planner)."
+        ),
+    ),
 }

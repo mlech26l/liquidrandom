@@ -35,10 +35,10 @@ def _leaf_id(leaf_path: list[str]) -> str:
 
 
 def _load_leaf_samples(
-    output_dir: str, leaf_path: list[str]
+    output_dir: str, category_name: str, leaf_path: list[str]
 ) -> list[dict[str, Any]]:
     path = (
-        Path(output_dir) / "samples" / "tool_group" / f"{_leaf_id(leaf_path)}.jsonl"
+        Path(output_dir) / "samples" / category_name / f"{_leaf_id(leaf_path)}.jsonl"
     )
     if not path.exists():
         return []
@@ -53,11 +53,12 @@ def _load_leaf_samples(
 
 def _save_leaf_samples(
     output_dir: str,
+    category_name: str,
     leaf_path: list[str],
     samples: list[dict[str, Any]],
 ) -> None:
     path = (
-        Path(output_dir) / "samples" / "tool_group" / f"{_leaf_id(leaf_path)}.jsonl"
+        Path(output_dir) / "samples" / category_name / f"{_leaf_id(leaf_path)}.jsonl"
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a", encoding="utf-8") as f:
@@ -229,6 +230,7 @@ async def _generate_variations_for_group(
 
 async def _generate_for_leaf(
     client: AsyncOpenAI,
+    category_name: str,
     leaf: TaxonomyNode,
     k: int,
     m: int,
@@ -238,7 +240,7 @@ async def _generate_for_leaf(
 ) -> int:
     """Generate tool groups for a single leaf. Returns number of new groups accepted."""
     leaf_path_str = " > ".join(leaf.path)
-    existing = _load_leaf_samples(output_dir, leaf.path)
+    existing = _load_leaf_samples(output_dir, category_name, leaf.path)
 
     existing_text = "None yet." if not existing else ""
     if existing:
@@ -303,7 +305,7 @@ async def _generate_for_leaf(
             )
 
             if deduped:
-                _save_leaf_samples(output_dir, leaf.path, deduped)
+                _save_leaf_samples(output_dir, category_name, leaf.path, deduped)
                 leaf.sample_count += len(deduped)
                 return len(deduped)
 
@@ -317,6 +319,7 @@ async def _generate_for_leaf(
 
 async def generate_tool_groups(
     client: AsyncOpenAI,
+    category_name: str,
     root: TaxonomyNode,
     target_samples: int,
     k: int,
@@ -332,7 +335,7 @@ async def generate_tool_groups(
     leaves = root.leaf_nodes()
 
     for leaf in leaves:
-        existing = _load_leaf_samples(output_dir, leaf.path)
+        existing = _load_leaf_samples(output_dir, category_name, leaf.path)
         leaf.sample_count = len(existing)
 
     total_existing = sum(leaf.sample_count for leaf in leaves)
@@ -378,6 +381,7 @@ async def generate_tool_groups(
             async def process_leaf(leaf: TaxonomyNode) -> int:
                 count = await _generate_for_leaf(
                     client,
+                    category_name,
                     leaf,
                     k,
                     m,
@@ -399,7 +403,7 @@ async def generate_tool_groups(
 
             batch_total = sum(r for r in results if isinstance(r, int))
 
-            save_taxonomy(root, output_dir, "tool_group")
+            save_taxonomy(root, output_dir, category_name)
 
             if batch_total == 0:
                 stall_rounds += 1

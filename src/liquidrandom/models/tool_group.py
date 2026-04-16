@@ -16,11 +16,13 @@ class ToolVariation:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ToolVariation:
+        raw_params = data["parameters"] or {}
+        raw_returns = data["returns"] or {}
         return cls(
             name=data["name"],
             description=data["description"],
-            parameters=dict(data["parameters"] or {}),
-            returns=dict(data["returns"] or {}),
+            parameters=raw_params if isinstance(raw_params, dict) else {"parameters": raw_params},
+            returns=raw_returns if isinstance(raw_returns, dict) else {"returns": raw_returns},
         )
 
     def __str__(self) -> str:
@@ -65,9 +67,10 @@ class ToolGroup:
     description: str
     taxonomy_path: str
     tools: list[ToolFunction]
+    kind: str = "default"
 
     _field_groups: ClassVar[dict[str, tuple[str, ...]]] = {
-        "high_level": ("domain", "description", "taxonomy_path", "tools"),
+        "high_level": ("domain", "description", "taxonomy_path", "kind", "tools"),
         "detailed": (),
     }
 
@@ -83,6 +86,7 @@ class ToolGroup:
             description=data["description"],
             taxonomy_path=data["taxonomy_path"],
             tools=tools,
+            kind=data.get("kind") or "default",
         )
 
     def to_str(self, detail: DetailLevel = DetailLevel.DETAILED) -> str:

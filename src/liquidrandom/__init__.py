@@ -4,16 +4,20 @@ from __future__ import annotations
 
 import random
 
-from liquidrandom._loader import load_category
+from liquidrandom._loader import load_category, load_random, load_random_where
 from liquidrandom.models import (
+    Aerial,
     CodingTask,
     DetailLevel,
     Domain,
     EmotionalState,
+    Indoor,
     InstructionComplexity,
     Job,
     Language,
     MathCategory,
+    Navigation,
+    PeopleScene,
     Persona,
     ReasoningPattern,
     Scenario,
@@ -21,18 +25,23 @@ from liquidrandom.models import (
     ToolFunction,
     ToolGroup,
     ToolVariation,
+    Warehouse,
     WritingStyle,
 )
 
 __all__ = [
+    "Aerial",
     "CodingTask",
     "DetailLevel",
     "Domain",
     "EmotionalState",
+    "Indoor",
     "InstructionComplexity",
     "Job",
     "Language",
     "MathCategory",
+    "Navigation",
+    "PeopleScene",
     "Persona",
     "ReasoningPattern",
     "Scenario",
@@ -40,7 +49,13 @@ __all__ = [
     "ToolFunction",
     "ToolGroup",
     "ToolVariation",
+    "Warehouse",
     "WritingStyle",
+    "aerial",
+    "indoor",
+    "people_scene",
+    "warehouse",
+    "navigation",
     "persona",
     "job",
     "coding_task",
@@ -54,6 +69,7 @@ __all__ = [
     "emotional_state",
     "instruction_complexity",
     "tool_group",
+    "physical_tool_group",
 ]
 
 
@@ -119,4 +135,39 @@ def instruction_complexity() -> InstructionComplexity:
 
 def tool_group() -> ToolGroup:
     """Return a random tool group."""
-    return random.choice(load_category("tool_group"))
+    return load_random("tool_group")
+
+
+def physical_tool_group() -> ToolGroup:
+    """Return a random tool group with kind='physical' (smart home, robots, AVs, drones, etc.).
+
+    This is a convenience filter over the unified tool_group dataset;
+    equivalent to repeatedly calling tool_group() until one with
+    kind == 'physical' is returned.
+    """
+    return load_random_where("tool_group", "kind", "physical")
+
+
+def aerial() -> Aerial:
+    """Return a random aerial image sample."""
+    return random.choice(load_category("aerial"))
+
+
+def indoor() -> Indoor:
+    """Return a random indoor space image sample."""
+    return random.choice(load_category("indoor"))
+
+
+def people_scene() -> PeopleScene:
+    """Return a random people scene image sample."""
+    return random.choice(load_category("people_scene"))
+
+
+def warehouse() -> Warehouse:
+    """Return a random warehouse image sample."""
+    return random.choice(load_category("warehouse"))
+
+
+def navigation() -> Navigation:
+    """Return a random navigation path image sample."""
+    return random.choice(load_category("navigation"))

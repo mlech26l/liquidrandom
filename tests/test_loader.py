@@ -6,7 +6,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 import liquidrandom
-from liquidrandom._loader import _cache, load_category
+from liquidrandom._loader import _cache, _lazy_tables, load_category
 from liquidrandom.models import Persona
 
 
@@ -28,6 +28,7 @@ def _write_parquet(path: str, rows: list[dict[str, object]]) -> None:
 
 def test_load_category_parses_parquet() -> None:
     _cache.clear()
+    _lazy_tables.clear()
     with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as f:
         tmp_path = f.name
     _write_parquet(tmp_path, [SAMPLE_PERSONA])
@@ -39,10 +40,12 @@ def test_load_category_parses_parquet() -> None:
     assert isinstance(result[0], Persona)
     assert result[0].name == "Test User"
     _cache.clear()
+    _lazy_tables.clear()
 
 
 def test_load_category_caches_in_memory() -> None:
     _cache.clear()
+    _lazy_tables.clear()
     with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as f:
         tmp_path = f.name
     _write_parquet(tmp_path, [SAMPLE_PERSONA])
@@ -52,6 +55,7 @@ def test_load_category_caches_in_memory() -> None:
         load_category("persona")
         assert mock_dl.call_count == 1
     _cache.clear()
+    _lazy_tables.clear()
 
 
 def test_load_category_unknown_raises() -> None:
@@ -64,6 +68,7 @@ def test_load_category_unknown_raises() -> None:
 
 def test_public_api_returns_model() -> None:
     _cache.clear()
+    _lazy_tables.clear()
     with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as f:
         tmp_path = f.name
     _write_parquet(tmp_path, [SAMPLE_PERSONA] * 5)
@@ -73,3 +78,4 @@ def test_public_api_returns_model() -> None:
         assert isinstance(p, Persona)
         assert p.name == "Test User"
     _cache.clear()
+    _lazy_tables.clear()
