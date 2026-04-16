@@ -1,0 +1,19 @@
+[project]
+name = "example-audio"
+version = "0.1.0"
+description = "Synthetic audio-to-tool-calling dataset generator"
+requires-python = ">=3.11"
+dependencies = [
+    "openai>=1.0.0",
+    "httpx>=0.27.0",
+    "liquidrandom",
+    "pyarrow>=14.0.0",
+    "rich>=13.0.0",
+    "typer>=0.9.0",
+]
+
+[dependency-groups]
+dev = []
+
+[tool.uv.sources]
+liquidrandom = { path = "../", editable = true }
