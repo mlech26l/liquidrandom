@@ -13,9 +13,19 @@ from huggingface_hub.utils import disable_progress_bars
 disable_progress_bars()
 logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
 
-from liquidrandom._registry import CATEGORIES, REPO_ID
+from liquidrandom._registry import CATEGORIES, IMAGE_CATEGORIES, REPO_ID
 
 _cache: dict[str, list[Any]] = {}
+
+
+def _reject_image_category(name: str) -> None:
+    """Image parquets are multi-GB; eager loading would materialize them all."""
+    if name in IMAGE_CATEGORIES:
+        raise ValueError(
+            f"{name!r} is an image category; use liquidrandom.image({name!r}), "
+            f"liquidrandom.image_chain({name!r}), or liquidrandom.{name}() "
+            "instead of the eager loaders."
+        )
 
 # Categories where converting all rows to Python objects is too expensive
 # (e.g. tool_group: ~6700 rows × nested JSON → ~700 MB of Python dicts).
@@ -37,6 +47,7 @@ def _ensure_downloaded(name: str) -> str:
 
 def load_category(name: str) -> list[Any]:
     """Load all samples for a category, fetching from HuggingFace if needed."""
+    _reject_image_category(name)
     if name in _cache:
         return _cache[name]
 
@@ -73,6 +84,7 @@ def load_random(name: str) -> Any:
     only parses the selected row into a Python object. Other categories
     use the full-cache path.
     """
+    _reject_image_category(name)
     if name not in CATEGORIES:
         raise ValueError(
             f"Unknown category: {name!r}. "
@@ -106,6 +118,7 @@ def load_random_where(name: str, column: str, value: Any) -> Any:
     a row-index list on first call for each (column, value) pair). For eager
     categories, filters the already-materialized list.
     """
+    _reject_image_category(name)
     if name not in CATEGORIES:
         raise ValueError(
             f"Unknown category: {name!r}. "

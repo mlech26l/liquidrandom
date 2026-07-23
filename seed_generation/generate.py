@@ -35,6 +35,9 @@ from image_config import (
     DEFAULT_IMAGE_N,
     DEFAULT_IMAGE_SAMPLES_PER_LEAF,
     DEFAULT_IMAGE_TAXONOMY_DEPTH,
+    PREVIEW_N,
+    PREVIEW_SAMPLES_PER_LEAF,
+    PREVIEW_TAXONOMY_DEPTH,
 )
 from llm import create_client
 from sampler import generate_samples
@@ -392,6 +395,7 @@ async def _run_generate_images(
     dedup_threshold: float,
     output_dir: str,
     resume: bool,
+    preview: bool = False,
 ) -> None:
     from image_sampler import generate_image_samples
 
@@ -443,7 +447,7 @@ async def _run_generate_images(
                 cat_state.taxonomy_done = False
                 continue
 
-        # Phase 2+3: Image prompt generation + Replicate image generation
+        # Phase 2+3: Image prompt generation + Gemini image generation
         if not cat_state.generation_done or not resume:
             try:
                 total = await generate_image_samples(
@@ -457,8 +461,10 @@ async def _run_generate_images(
                     dedup_threshold=dedup_threshold,
                     output_dir=output_dir,
                 )
-                # Only mark done if we reached the target
-                cat_state.generation_done = total >= n
+                # Only mark done if we reached the target; a preview run never
+                # marks done (the full run continues from the same tree).
+                if not preview:
+                    cat_state.generation_done = total >= n
                 cat_state.total_samples = total
                 state.save(state_path)
             except KeyboardInterrupt:
@@ -513,7 +519,9 @@ def generate_images(
         DEFAULT_IMAGE_BATCH_SIZE, "--batch-size", help="Concurrent LLM calls"
     ),
     image_concurrency: int = typer.Option(
-        DEFAULT_IMAGE_CONCURRENCY, "--image-concurrency", help="Concurrent Replicate API calls"
+        DEFAULT_IMAGE_CONCURRENCY,
+        "--image-concurrency",
+        help="Concurrent Gemini image API calls",
     ),
     taxonomy_depth: int = typer.Option(
         DEFAULT_IMAGE_TAXONOMY_DEPTH, "--taxonomy-depth", help="Max taxonomy tree depth"
@@ -529,8 +537,18 @@ def generate_images(
     ),
     resume: bool = typer.Option(False, "--resume", help="Resume from checkpoint"),
     output_dir: str = typer.Option("output", "--output-dir", help="Output directory"),
+    preview: bool = typer.Option(
+        False,
+        "--preview",
+        help="Quality-gate mode: generate ~20 images per category for human "
+        "review with review-images before a full run",
+    ),
 ) -> None:
     """Generate image seed data for all or selected image categories."""
+    if preview:
+        n = PREVIEW_N
+        samples_per_leaf = PREVIEW_SAMPLES_PER_LEAF
+        taxonomy_depth = PREVIEW_TAXONOMY_DEPTH
     if not categories:
         resolved = list(IMAGE_CATEGORY_CONFIGS.keys())
     else:
@@ -554,8 +572,14 @@ def generate_images(
             dedup_threshold=dedup_threshold,
             output_dir=output_dir,
             resume=resume,
+            preview=preview,
         )
     )
+    if preview:
+        console.print(
+            "\n[bold]Preview complete.[/bold] Review the results with: "
+            "[cyan]python generate.py review-images <category>[/cyan]"
+        )
 
 
 @app.command(name="review-images")

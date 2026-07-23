@@ -265,6 +265,48 @@ for tool in group.tools:
 - Tools with an empty variation list may occur occasionally; check and skip if needed.
 - **`kind` discriminator.** Each `ToolGroup` carries a `kind` field: `"default"` for SaaS/cloud-style tools, `"physical"` for embodied/physical-AI tools (smart home voice assistants, mobile/manipulator/humanoid robots, autonomous vehicles, drones, industrial automation, agricultural/medical robotics, wearable AI). `liquidrandom.tool_group()` draws from the full pool; `liquidrandom.physical_tool_group()` is a convenience filter equivalent to sampling until `kind == "physical"`.
 
+## 🖼️ Image Seed Data
+
+Beyond text, `liquidrandom` provides image seed data for VLM data generation pipelines (e.g. sample an image + a persona, have a VLM write a request about the image, then a second call answer it). Images are 1024px WebP, organized into 11 categories with filterable tags and edit chains.
+
+```python
+import liquidrandom
+
+# Random image from a category (downloads that category's Parquet on first use)
+img = liquidrandom.indoor_scene()
+print(img.brief())      # "indoor_scene image: A sunlit farmhouse kitchen. Tags: no_people, lighting:natural."
+img.save("sample.webp") # raw bytes, no extra deps
+pil = img.to_pil()      # requires: pip install liquidrandom[image]
+
+# Filter by tags (AND semantics)
+img = liquidrandom.image("automotive", tags=["view:in_cabin", "people"])
+
+# Edit chains: a base image plus edited variants (great for multi-turn /
+# multi-image data). Chains record which image each edit was applied to.
+chain = liquidrandom.image_chain("ui_screenshot")
+for s in chain:
+    print(s.turn_index, s.parent_turn, s.edit_instruction or "(base)")
+full = liquidrandom.image_chain_of(img)  # the chain a sample belongs to
+```
+
+| Function | Category | Example tags |
+|---|---|---|
+| `indoor_scene()` | Indoor scenes | `people`/`no_people`, `setting:*`, `lighting:*`, `tidiness:*` |
+| `outdoor_scene()` | Outdoor scenes | `people`/`no_people`, `setting:*`, `time:*`, `weather:*` |
+| `aerial_view()` | Satellite & aerial | `view:satellite/drone/aircraft`, `terrain:*`, `time:*` |
+| `agriculture()` | Farms, crops, pests, machinery | `subject:*`, `season:*`, `people`/`no_people` |
+| `industrial()` | Factories, robots, warehouses | `subject:*`, `lighting:*`, `people`/`no_people` |
+| `automotive()` | Vehicles, traffic, in-cabin | `view:exterior/in_cabin/road/traffic`, `time:*` |
+| `ui_screenshot()` | App & website UIs | `platform:*`, `theme:light/dark`, `ui_state:*` |
+| `document()` | Receipts, forms, handwriting | `medium:*`, `capture:scan/photo`, `quality:*` |
+| `chart()` | Charts, diagrams, infographics | `form:bar/line/pie/...`, `style:clean/hand_drawn` |
+| `retail_product()` | Products, shelves, packaging | `presentation:*`, `people`/`no_people` |
+| `food()` | Dishes, ingredients, kitchens | `stage:raw/cooking/plated`, `setting:*` |
+
+All functions accept `tags=[...]`, and the generic `liquidrandom.image(category, tags)` / `liquidrandom.image_chain(category, tags, min_length)` work across categories. Each `ImageSample` exposes `image` (bytes), `caption`, `prompt`, `tags`, `taxonomy_path`, `width`/`height`/`aspect_ratio`, and chain metadata (`chain_id`, `turn_index`, `parent_turn`, `edit_instruction`).
+
+Image files are large (several GB per category); the loader never materializes whole files — it reads single small row groups per sample, so memory stays flat.
+
 ## 📄 License
 
 MIT

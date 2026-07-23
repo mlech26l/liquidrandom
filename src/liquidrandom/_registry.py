@@ -6,6 +6,7 @@ from typing import Any
 from liquidrandom.models.coding_task import CodingTask
 from liquidrandom.models.domain import Domain
 from liquidrandom.models.emotional_state import EmotionalState
+from liquidrandom.models.image_sample import ImageSample
 from liquidrandom.models.instruction_complexity import InstructionComplexity
 from liquidrandom.models.job import Job
 from liquidrandom.models.language import Language
@@ -42,4 +43,33 @@ CATEGORIES: dict[str, CategoryInfo] = {
         InstructionComplexity, "instruction_complexity.parquet"
     ),
     "tool_group": CategoryInfo(ToolGroup, "tool_group.parquet"),
+    "indoor_scene": CategoryInfo(ImageSample, "indoor_scene.parquet"),
+    "outdoor_scene": CategoryInfo(ImageSample, "outdoor_scene.parquet"),
+    "aerial_view": CategoryInfo(ImageSample, "aerial_view.parquet"),
+    "agriculture": CategoryInfo(ImageSample, "agriculture.parquet"),
+    "industrial": CategoryInfo(ImageSample, "industrial.parquet"),
+    "automotive": CategoryInfo(ImageSample, "automotive.parquet"),
+    "ui_screenshot": CategoryInfo(ImageSample, "ui_screenshot.parquet"),
+    "document": CategoryInfo(ImageSample, "document.parquet"),
+    "chart": CategoryInfo(ImageSample, "chart.parquet"),
+    "retail_product": CategoryInfo(ImageSample, "retail_product.parquet"),
+    "food": CategoryInfo(ImageSample, "food.parquet"),
 }
+
+# Image categories use the row-group-lazy loader in _image_loader.py and are
+# rejected by the eager/text loaders in _loader.py (files are multi-GB).
+IMAGE_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "indoor_scene",
+        "outdoor_scene",
+        "aerial_view",
+        "agriculture",
+        "industrial",
+        "automotive",
+        "ui_screenshot",
+        "document",
+        "chart",
+        "retail_product",
+        "food",
+    }
+)

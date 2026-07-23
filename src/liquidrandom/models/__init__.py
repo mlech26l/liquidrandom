@@ -2,6 +2,7 @@ from liquidrandom._detail import DetailLevel
 from liquidrandom.models.coding_task import CodingTask
 from liquidrandom.models.domain import Domain
 from liquidrandom.models.emotional_state import EmotionalState
+from liquidrandom.models.image_sample import ImageSample
 from liquidrandom.models.instruction_complexity import InstructionComplexity
 from liquidrandom.models.job import Job
 from liquidrandom.models.language import Language
@@ -18,6 +19,7 @@ __all__ = [
     "DetailLevel",
     "Domain",
     "EmotionalState",
+    "ImageSample",
     "InstructionComplexity",
     "Job",
     "Language",

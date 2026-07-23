@@ -7,16 +7,23 @@ import json
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from openai import AsyncOpenAI
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, MofNCompleteColumn, TimeElapsedColumn, TimeRemainingColumn
 
-from categories import CategoryConfig
 from llm import llm_call
 
 console = Console()
+
+
+class TaxonomyCategory(Protocol):
+    """Any category config a taxonomy can be built for (text, tool, image)."""
+
+    name: str
+    display_name: str
+    taxonomy_seed_prompt: str
 
 
 @dataclass
@@ -79,7 +86,7 @@ def load_taxonomy(output_dir: str, category_name: str) -> TaxonomyNode | None:
 async def _expand_node(
     client: AsyncOpenAI,
     node: TaxonomyNode,
-    category: CategoryConfig,
+    category: TaxonomyCategory,
     branching_factor: int,
     existing_siblings: list[str],
 ) -> list[TaxonomyNode]:
@@ -124,7 +131,7 @@ async def _expand_node(
 
 async def generate_taxonomy(
     client: AsyncOpenAI,
-    category: CategoryConfig,
+    category: TaxonomyCategory,
     target_samples: int,
     samples_per_leaf: int,
     max_depth: int,

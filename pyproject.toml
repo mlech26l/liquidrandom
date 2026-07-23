@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "liquidrandom"
-version = "0.4.0"
+version = "0.5.0"
 description = "Pseudo-random seed data generation for ML/LLM training diversity"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -15,9 +15,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+image = [
+    "pillow>=10.0",
+]
 dev = [
     "pytest>=8.0",
     "ty",
+    "pillow>=10.0",
 ]
 
 [tool.hatch.build.targets.wheel]

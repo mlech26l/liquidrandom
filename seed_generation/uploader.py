@@ -15,6 +15,7 @@ from rich.console import Console
 
 from categories import CATEGORY_CONFIGS
 from image_categories import IMAGE_CATEGORY_CONFIGS
+from image_config import PARQUET_ROW_GROUP_SIZE
 
 console = Console()
 
@@ -107,14 +108,36 @@ def _consolidate_category(output_dir: str, category_name: str, dest_dir: Path) -
     return len(rows)
 
 
+# Explicit schema for image category parquets. Chain rows are written
+# contiguously, ordered by turn_index, and small row groups let the package
+# read single random samples without materializing the multi-GB file.
+_IMAGE_SCHEMA = pa.schema(
+    [
+        pa.field("image", pa.binary()),
+        pa.field("image_format", pa.string()),
+        pa.field("width", pa.int64()),
+        pa.field("height", pa.int64()),
+        pa.field("aspect_ratio", pa.string()),
+        pa.field("taxonomy_path", pa.string()),
+        pa.field("caption", pa.string()),
+        pa.field("prompt", pa.string()),
+        pa.field("edit_instruction", pa.string()),
+        pa.field("tags", pa.list_(pa.string())),
+        pa.field("chain_id", pa.string()),
+        pa.field("turn_index", pa.int64()),
+        pa.field("parent_turn", pa.int64()),
+        pa.field("chain_length", pa.int64()),
+    ]
+)
+
+
 def _consolidate_image_category(
     output_dir: str, category_name: str, dest_dir: Path
 ) -> int:
     """Consolidate image category JSONL files into Parquet with binary image column.
 
-    Reads per-leaf JSONL files where each row has 'image_base64' and 'image_ext'
-    fields. Converts base64 to raw bytes for the Parquet binary column.
-    Drops 'image_base64', 'image_ext', and 'image_prompt' fields from the output.
+    Reads per-leaf JSONL files where each row has an 'image_base64' field,
+    decoded into the binary 'image' column. Rows of a chain stay contiguous.
 
     Returns the number of samples consolidated.
     """
@@ -124,9 +147,7 @@ def _consolidate_image_category(
     if not samples_dir.exists():
         return 0
 
-    drop_fields = {"image_base64", "image_ext", "image_prompt"}
     rows: list[dict[str, Any]] = []
-
     for jsonl_file in sorted(samples_dir.glob("*.jsonl")):
         with open(jsonl_file, encoding="utf-8") as in_f:
             for line in in_f:
@@ -134,38 +155,21 @@ def _consolidate_image_category(
                 if not line:
                     continue
                 raw = json.loads(line)
-
-                # Convert base64 image to bytes
-                img_b64 = raw.get("image_base64", "")
-                if img_b64:
-                    image_bytes = base64.b64decode(img_b64)
-                else:
-                    image_bytes = b""
-
-                row = {k: v for k, v in raw.items() if k not in drop_fields}
-                row["image"] = image_bytes
+                row = {k: v for k, v in raw.items() if k != "image_base64"}
+                row["image"] = base64.b64decode(raw.get("image_base64", ""))
                 rows.append(row)
 
     if not rows:
         return 0
 
-    # Build schema: text fields + binary image column
-    fields_from_first = []
-    for key, val in rows[0].items():
-        if key == "image":
-            fields_from_first.append(pa.field("image", pa.binary()))
-        elif isinstance(val, list):
-            fields_from_first.append(pa.field(key, pa.list_(pa.string())))
-        elif isinstance(val, int):
-            fields_from_first.append(pa.field(key, pa.int64()))
-        else:
-            fields_from_first.append(pa.field(key, pa.string()))
-
-    schema = pa.schema(fields_from_first)
-    table = pa.Table.from_pylist(rows, schema=schema)
-
+    table = pa.Table.from_pylist(rows, schema=_IMAGE_SCHEMA)
     output_path = dest_dir / f"{category_name}.parquet"
-    pq.write_table(table, output_path, compression="zstd")
+    pq.write_table(
+        table,
+        output_path,
+        compression="zstd",
+        row_group_size=PARQUET_ROW_GROUP_SIZE,
+    )
 
     return len(rows)
 
@@ -173,30 +177,62 @@ def _consolidate_image_category(
 def _generate_dataset_card(categories: dict[str, int]) -> str:
     """Generate a dataset card README.md."""
     total = sum(categories.values())
-    rows = ""
+    text_rows = ""
+    image_rows = ""
+    image_total = 0
     for name, count in sorted(categories.items()):
-        if name in CATEGORY_CONFIGS:
-            display = CATEGORY_CONFIGS[name].display_name
-        elif name in IMAGE_CATEGORY_CONFIGS:
+        if name in IMAGE_CATEGORY_CONFIGS:
             display = IMAGE_CATEGORY_CONFIGS[name].display_name
+            image_rows += f"| {display} | {count:,} | `{name}.parquet` |\n"
+            image_total += count
         else:
-            display = name
-        rows += f"| {display} | {count:,} | `{name}.parquet` |\n"
+            display = (
+                CATEGORY_CONFIGS[name].display_name
+                if name in CATEGORY_CONFIGS
+                else name
+            )
+            text_rows += f"| {display} | {count:,} | `{name}.parquet` |\n"
+
+    size_bucket = "100K<n<1M" if total >= 100_000 else "10K<n<100K"
+    task_categories = "  - text-generation\n"
+    extra_tags = ""
+    image_section = ""
+    image_usage = ""
+    if image_rows:
+        task_categories += "  - text-to-image\n  - image-classification\n"
+        extra_tags = "  - image\n  - multimodal\n"
+        image_section = f"""
+## Image Categories
+
+{image_total:,} images (1024px WebP) generated with Gemini Nano Banana from
+taxonomy-derived prompts plus diverse image edits. Images come in edit chains:
+a base image (`turn_index` 0) and edited variants linked via `chain_id` /
+`parent_turn`, with the applied `edit_instruction` stored per image. Every
+image carries a `tags` list (controlled vocabulary, VLM-verified) for
+filtered selection.
+
+| Category | Images | File |
+|---|---|---|
+{image_rows}"""
+        image_usage = """
+img = liquidrandom.image("indoor_scene", tags=["no_people"])
+chain = liquidrandom.image_chain("ui_screenshot")  # base + edited variants
+img.save("sample.webp")
+"""
 
     return f"""---
 license: mit
 task_categories:
-  - text-generation
-language:
+{task_categories}language:
   - en
 size_categories:
-  - 10K<n<100K
+  - {size_bucket}
 tags:
   - synthetic
   - seed-data
   - diversity
   - llm-training
----
+{extra_tags}---
 
 # liquidrandom-data
 
@@ -214,7 +250,7 @@ and fuzzy deduplication. Data is stored as Parquet with zstd compression.
 
 | Category | Samples | File |
 |---|---|---|
-{rows}
+{text_rows}{image_section}
 
 ## Usage
 
@@ -223,7 +259,7 @@ import liquidrandom
 
 persona = liquidrandom.persona()
 print(persona)
-```
+{image_usage}```
 
 ## Generation
 
