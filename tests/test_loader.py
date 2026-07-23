@@ -1,5 +1,6 @@
 import tempfile
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pyarrow as pa
@@ -21,7 +22,7 @@ SAMPLE_PERSONA = {
 }
 
 
-def _write_parquet(path: str, rows: list[dict[str, object]]) -> None:
+def _write_parquet(path: str, rows: list[dict[str, Any]]) -> None:
     table = pa.Table.from_pylist(rows)
     pq.write_table(table, path)
 

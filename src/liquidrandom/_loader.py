@@ -5,6 +5,7 @@ from typing import Any
 
 import logging
 
+import pyarrow as pa
 import pyarrow.parquet as pq
 from huggingface_hub import hf_hub_download
 from huggingface_hub.utils import disable_progress_bars
@@ -21,7 +22,7 @@ _cache: dict[str, list[Any]] = {}
 # These keep the Arrow table cached (~24 MB) and only parse one row per call.
 _LAZY_CATEGORIES: set[str] = {"tool_group"}
 
-_lazy_tables: dict[str, pq.lib.Table] = {}
+_lazy_tables: dict[str, pa.Table] = {}
 
 # Per-category, per-(column,value) index of row indices — populated on first
 # filtered-sample call. Shape: {category: {(column, value): [row_idx, ...]}}
@@ -90,7 +91,7 @@ def load_random(name: str) -> Any:
     return _parse_lazy_row(name, table, row_idx)
 
 
-def _parse_lazy_row(name: str, table: pq.lib.Table, row_idx: int) -> Any:
+def _parse_lazy_row(name: str, table: pa.Table, row_idx: int) -> Any:
     info = CATEGORIES[name]
     row_dict: dict[str, Any] = {}
     for col in table.column_names:
