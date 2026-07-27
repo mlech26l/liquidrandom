@@ -302,7 +302,8 @@ def _generate_dataset_card(categories: dict[str, int]) -> str:
         image_section = f"""
 ## Image Categories
 
-{image_total:,} images (1024px WebP) generated with Gemini Nano Banana from
+{image_total:,} images (WebP, ~1K on the long edge, native model output —
+resolution varies with aspect ratio) generated with Gemini Nano Banana from
 taxonomy-derived prompts plus diverse image edits. Images come in edit chains:
 a base image (`turn_index` 0) and edited variants linked via `chain_id` /
 `parent_turn`, with the applied `edit_instruction` stored per image. Every
