@@ -267,7 +267,9 @@ for tool in group.tools:
 
 ## 🖼️ Image Seed Data
 
-Beyond text, `liquidrandom` provides image seed data for VLM data generation pipelines (e.g. sample an image + a persona, have a VLM write a request about the image, then a second call answer it). Images are 1024px WebP, organized into 11 categories with filterable tags and edit chains.
+Beyond text, `liquidrandom` provides image seed data for VLM data generation pipelines (e.g. sample an image + a persona, have a VLM write a request about the image, then a second call answer it). Images are ~1K WebP at their native aspect ratio, organized into 11 categories with filterable tags and edit chains.
+
+**➡️ [Browse the sample gallery](https://github.com/mlech26l/liquidrandom/blob/main/preview/README.md)** — a few images from every category, plus an example edit chain.
 
 ```python
 import liquidrandom

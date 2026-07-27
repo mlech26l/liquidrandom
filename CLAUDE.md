@@ -24,6 +24,7 @@ Python package for pseudo-random seed data generation for ML/LLM training divers
 │   ├── test_loader.py              # Parquet loading, caching, public API (mocked HF)
 │   ├── test_image_models.py        # ImageSample round-trip, to_str, save/to_pil
 │   └── test_image_loader.py        # Lazy row-group access, tag filter, chains (mocked HF)
+├── preview/                        # Generated sample gallery linked from README (384px JPEGs)
 └── seed_generation/                # Separate project with own pyproject.toml
     ├── pyproject.toml              # deps: openai, rich, typer, huggingface-hub, pyarrow, google-genai, pillow
     ├── README.md
@@ -40,6 +41,7 @@ Python package for pseudo-random seed data generation for ML/LLM training divers
     ├── validator.py                # LLM quality validation per batch (text)
     ├── dedup.py                    # Jaccard similarity dedup on token sets
     ├── llm.py                      # AsyncOpenAI client wrapper with retries
+    ├── make_preview_gallery.py     # Build preview/ (small JPEGs + one markdown page) from the parquets
     ├── tag_normalize.py            # Map drifted VLM tags back onto the controlled vocabulary
     ├── uploader.py                 # Consolidate JSONL → Parquet + upload to HF
     └── state.py                    # Checkpoint/resume state
