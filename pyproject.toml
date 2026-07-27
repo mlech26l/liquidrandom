@@ -31,6 +31,10 @@ packages = ["src/liquidrandom"]
 exclude = [
     "output/",
     "image_output/",
+    # Local-only working files, deliberately not in git either.
+    "copy_to_alde.sh",
+    "IMAGE_GEN.md",
+    "STEP2.md",
     "backup/",
     "example_audio/",
     "seed_generation/output/",
