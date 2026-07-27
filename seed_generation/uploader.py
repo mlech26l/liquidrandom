@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
-import tempfile
+from collections import Counter
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,7 @@ from rich.console import Console
 from categories import CATEGORY_CONFIGS
 from image_categories import IMAGE_CATEGORY_CONFIGS
 from image_config import PARQUET_ROW_GROUP_SIZE
+from tag_normalize import TagNormalizer
 
 console = Console()
 
@@ -131,23 +134,45 @@ _IMAGE_SCHEMA = pa.schema(
 )
 
 
-def _consolidate_image_category(
-    output_dir: str, category_name: str, dest_dir: Path
-) -> int:
-    """Consolidate image category JSONL files into Parquet with binary image column.
+# Rows are buffered in memory between Parquet writes. A full image category is
+# several GB, so it is written incrementally: this many rows (~120 MB of WebP)
+# are held at a time regardless of how large the category is.
+_IMAGE_WRITE_BATCH = 512
 
-    Reads per-leaf JSONL files where each row has an 'image_base64' field,
-    decoded into the binary 'image' column. Rows of a chain stay contiguous.
 
-    Returns the number of samples consolidated.
+def _renumber_chain(chain: list[dict[str, Any]]) -> bool:
+    """Make turn_index contiguous from 0 and repoint parent_turn accordingly.
+
+    A rejected edit leaves a gap in the planned turn numbers (turns [0, 1, 3]),
+    which would break the invariant that turn_index is the row's position in
+    the chain. Renumbering is a pure relabeling: prompts and instructions are
+    untouched and every parent still refers to the same image.
+
+    Returns True if the chain needed renumbering.
     """
-    import base64
+    chain.sort(key=lambda r: r["turn_index"])
+    remap = {row["turn_index"]: i for i, row in enumerate(chain)}
+    changed = any(old != new for old, new in remap.items())
+    for row in chain:
+        row["turn_index"] = remap[row["turn_index"]]
+        parent = row["parent_turn"]
+        row["parent_turn"] = remap.get(parent, -1) if parent >= 0 else -1
+        row["chain_length"] = len(chain)
+    return changed
 
-    samples_dir = Path(output_dir) / "samples" / category_name
-    if not samples_dir.exists():
-        return 0
 
-    rows: list[dict[str, Any]] = []
+def _iter_image_rows(
+    samples_dir: Path,
+    normalizer: TagNormalizer,
+    dropped: Counter[str],
+    stats: Counter[str],
+) -> Iterator[dict[str, Any]]:
+    """Yield Parquet-ready rows from a category's per-leaf JSONL files.
+
+    Rows are emitted a chain at a time so turn numbering can be repaired; the
+    sampler appends whole chains, so a chain never spans leaf files.
+    """
+    chain: list[dict[str, Any]] = []
     for jsonl_file in sorted(samples_dir.glob("*.jsonl")):
         with open(jsonl_file, encoding="utf-8") as in_f:
             for line in in_f:
@@ -157,21 +182,94 @@ def _consolidate_image_category(
                 raw = json.loads(line)
                 row = {k: v for k, v in raw.items() if k != "image_base64"}
                 row["image"] = base64.b64decode(raw.get("image_base64", ""))
-                rows.append(row)
+                tags, unmapped = normalizer.normalize(list(row.get("tags") or []))
+                row["tags"] = tags
+                for tag in unmapped:
+                    dropped[tag] += 1
 
-    if not rows:
+                if chain and row["chain_id"] != chain[0]["chain_id"]:
+                    stats["renumbered"] += _renumber_chain(chain)
+                    yield from chain
+                    chain = []
+                chain.append(row)
+    if chain:
+        stats["renumbered"] += _renumber_chain(chain)
+        yield from chain
+
+
+def _consolidate_image_category(
+    output_dir: str, category_name: str, dest_dir: Path
+) -> int:
+    """Consolidate image category JSONL files into Parquet with binary image column.
+
+    Reads per-leaf JSONL files where each row has an 'image_base64' field,
+    decoded into the binary 'image' column. Rows of a chain stay contiguous.
+    Written incrementally so memory stays flat on multi-GB categories.
+
+    Returns the number of samples consolidated.
+    """
+    samples_dir = Path(output_dir) / "samples" / category_name
+    if not samples_dir.exists():
         return 0
 
-    table = pa.Table.from_pylist(rows, schema=_IMAGE_SCHEMA)
+    normalizer = TagNormalizer(IMAGE_CATEGORY_CONFIGS[category_name])
+    dropped: Counter[str] = Counter()
+    stats: Counter[str] = Counter()
     output_path = dest_dir / f"{category_name}.parquet"
-    pq.write_table(
-        table,
-        output_path,
-        compression="zstd",
-        row_group_size=PARQUET_ROW_GROUP_SIZE,
-    )
+    partial_path = output_path.with_suffix(".parquet.partial")
 
-    return len(rows)
+    total = 0
+    writer: pq.ParquetWriter | None = None
+    batch: list[dict[str, Any]] = []
+    try:
+        for row in _iter_image_rows(samples_dir, normalizer, dropped, stats):
+            batch.append(row)
+            if len(batch) >= _IMAGE_WRITE_BATCH:
+                if writer is None:
+                    writer = pq.ParquetWriter(
+                        partial_path, _IMAGE_SCHEMA, compression="zstd"
+                    )
+                writer.write_table(
+                    pa.Table.from_pylist(batch, schema=_IMAGE_SCHEMA),
+                    row_group_size=PARQUET_ROW_GROUP_SIZE,
+                )
+                total += len(batch)
+                batch = []
+        if batch:
+            if writer is None:
+                writer = pq.ParquetWriter(
+                    partial_path, _IMAGE_SCHEMA, compression="zstd"
+                )
+            writer.write_table(
+                pa.Table.from_pylist(batch, schema=_IMAGE_SCHEMA),
+                row_group_size=PARQUET_ROW_GROUP_SIZE,
+            )
+            total += len(batch)
+    finally:
+        if writer is not None:
+            writer.close()
+
+    if total == 0:
+        partial_path.unlink(missing_ok=True)
+        return 0
+
+    # Rename only on success, so an interrupted run never leaves a short
+    # parquet that a resume would mistake for a finished one.
+    partial_path.replace(output_path)
+
+    if dropped:
+        shown = ", ".join(f"{t} ({n})" for t, n in dropped.most_common(5))
+        console.print(
+            f"    [yellow]dropped {sum(dropped.values()):,} off-vocabulary tag "
+            f"values: {shown}[/yellow]"
+        )
+    if stats["renumbered"]:
+        console.print(
+            f"    [dim]renumbered {stats['renumbered']:,} chains that lost an "
+            "edit[/dim]"
+        )
+
+    return total
 
 
 def _generate_dataset_card(categories: dict[str, int]) -> str:
@@ -270,59 +368,136 @@ Data was generated using the `liquidrandom` seed generation scripts with:
 """
 
 
+def _remote_row_counts(repo_id: str, filenames: list[str]) -> dict[str, int]:
+    """Row counts of parquet files already in the repo, read from their footers.
+
+    Lets the dataset card keep listing categories whose source samples are not
+    present locally (e.g. uploading images from a machine that only generated
+    images). Returns an empty mapping if the repo cannot be read.
+    """
+    counts: dict[str, int] = {}
+    try:
+        from huggingface_hub import HfFileSystem
+
+        fs = HfFileSystem()
+        for filename in filenames:
+            path = f"datasets/{repo_id}/{filename}"
+            with fs.open(path, "rb") as handle:
+                counts[filename] = pq.ParquetFile(handle).metadata.num_rows
+    except Exception as exc:  # network, missing repo, unreadable file
+        console.print(f"[yellow]Could not read remote row counts: {exc}[/yellow]")
+    return counts
+
+
 def consolidate_and_upload(
-    output_dir: str, repo_id: str, skip_images: bool = False
+    output_dir: str,
+    repo_id: str,
+    skip_images: bool = False,
+    work_dir: str | None = None,
+    force: bool = False,
 ) -> None:
-    """Consolidate all samples and upload to HuggingFace."""
+    """Consolidate all samples and upload to HuggingFace.
+
+    Parquet files are staged in `work_dir` (default `<output_dir>/parquet`) on
+    real disk rather than a temp directory: the image categories total tens of
+    GB. Staged files and files already uploaded with a matching size are
+    reused, so an interrupted upload can simply be re-run.
+    """
     hf_token = os.environ.get("HF_TOKEN")
     if not hf_token:
         console.print("[red]HF_TOKEN environment variable is not set[/red]")
         raise SystemExit(1)
 
     api = HfApi(token=hf_token)
+    staging = Path(work_dir) if work_dir else Path(output_dir) / "parquet"
+    staging.mkdir(parents=True, exist_ok=True)
+    console.print(f"[dim]Staging parquet files in {staging}[/dim]")
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        tmp_path = Path(tmp_dir)
-        category_counts: dict[str, int] = {}
+    category_counts: dict[str, int] = {}
 
-        console.print("[bold]Consolidating text samples...[/bold]")
-        for cat_name in CATEGORY_CONFIGS:
-            if cat_name in _MERGED_INTO_OTHER:
-                continue  # merged into another category's parquet
-            count = _consolidate_category(output_dir, cat_name, tmp_path)
+    def _staged(cat_name: str) -> int | None:
+        """Row count of an already-staged parquet, or None if it must be built."""
+        path = staging / f"{cat_name}.parquet"
+        if force or not path.exists():
+            return None
+        try:
+            return pq.read_metadata(path).num_rows
+        except Exception:
+            return None
+
+    console.print("[bold]Consolidating text samples...[/bold]")
+    for cat_name in CATEGORY_CONFIGS:
+        if cat_name in _MERGED_INTO_OTHER:
+            continue  # merged into another category's parquet
+        count = _staged(cat_name)
+        if count is None:
+            count = _consolidate_category(output_dir, cat_name, staging)
+        if count > 0:
+            category_counts[cat_name] = count
+            console.print(f"  {cat_name}: {count:,} samples")
+
+    if skip_images:
+        console.print("[yellow]Skipping image samples (--skip-images)[/yellow]")
+    else:
+        console.print("[bold]Consolidating image samples...[/bold]")
+        for cat_name in IMAGE_CATEGORY_CONFIGS:
+            count = _staged(cat_name)
+            if count is not None:
+                console.print(f"  {cat_name}: {count:,} images [dim](staged)[/dim]")
+            else:
+                console.print(f"  {cat_name}: consolidating...")
+                count = _consolidate_image_category(output_dir, cat_name, staging)
+                if count > 0:
+                    console.print(f"  {cat_name}: {count:,} images")
             if count > 0:
                 category_counts[cat_name] = count
-                console.print(f"  {cat_name}: {count:,} samples")
 
-        if skip_images:
-            console.print("[yellow]Skipping image samples (--skip-images)[/yellow]")
-        else:
-            console.print("[bold]Consolidating image samples...[/bold]")
-            for cat_name in IMAGE_CATEGORY_CONFIGS:
-                count = _consolidate_image_category(output_dir, cat_name, tmp_path)
-                if count > 0:
-                    category_counts[cat_name] = count
-                    console.print(f"  {cat_name}: {count:,} images")
+    if not category_counts:
+        console.print("[red]No samples found to upload[/red]")
+        return
 
-        if not category_counts:
-            console.print("[red]No samples found to upload[/red]")
-            return
+    api.create_repo(repo_id=repo_id, repo_type="dataset", exist_ok=True)
+    remote_sizes: dict[str, int] = {}
+    try:
+        info = api.repo_info(repo_id=repo_id, repo_type="dataset", files_metadata=True)
+        remote_sizes = {s.rfilename: s.size or 0 for s in info.siblings or []}
+    except Exception as exc:
+        console.print(f"[yellow]Could not list remote files: {exc}[/yellow]")
 
-        # Write dataset card
-        readme_content = _generate_dataset_card(category_counts)
-        with open(tmp_path / "README.md", "w", encoding="utf-8") as f:
-            f.write(readme_content)
+    # Categories that live only in the repo (not regenerated here) still belong
+    # on the dataset card.
+    absent = [
+        f"{name}.parquet"
+        for name in list(CATEGORY_CONFIGS) + list(IMAGE_CATEGORY_CONFIGS)
+        if name not in category_counts
+        and name not in _MERGED_INTO_OTHER
+        and f"{name}.parquet" in remote_sizes
+    ]
+    if absent:
+        console.print(f"[dim]Reading row counts of {len(absent)} remote-only file(s)[/dim]")
+        for filename, rows in _remote_row_counts(repo_id, absent).items():
+            category_counts[filename.removesuffix(".parquet")] = rows
 
-        console.print(f"\n[bold]Uploading to {repo_id}...[/bold]")
-        api.create_repo(repo_id=repo_id, repo_type="dataset", exist_ok=True)
-        api.upload_folder(
-            folder_path=str(tmp_path),
+    readme_path = staging / "README.md"
+    readme_path.write_text(_generate_dataset_card(category_counts), encoding="utf-8")
+
+    console.print(f"\n[bold]Uploading to {repo_id}...[/bold]")
+    for path in sorted(staging.glob("*.parquet")) + [readme_path]:
+        size = path.stat().st_size
+        # The card is rewritten every run and is tiny; always push it.
+        if path is not readme_path and not force and remote_sizes.get(path.name) == size:
+            console.print(f"  {path.name}: [dim]already uploaded[/dim]")
+            continue
+        console.print(f"  {path.name}: uploading {size / 1e6:,.0f} MB...")
+        api.upload_file(
+            path_or_fileobj=str(path),
+            path_in_repo=path.name,
             repo_id=repo_id,
             repo_type="dataset",
         )
 
-        total = sum(category_counts.values())
-        console.print(
-            f"[green]Uploaded {total:,} samples across "
-            f"{len(category_counts)} categories to {repo_id}[/green]"
-        )
+    total = sum(category_counts.values())
+    console.print(
+        f"[green]Uploaded {total:,} samples across "
+        f"{len(category_counts)} categories to {repo_id}[/green]"
+    )

@@ -612,10 +612,24 @@ def upload_only(
         "--skip-images",
         help="Skip image category consolidation/upload (any existing remote image parquets stay untouched; README will only list text categories)",
     ),
+    work_dir: str = typer.Option(
+        None,
+        "--work-dir",
+        help="Where to stage parquet files (default: <output-dir>/parquet). Needs tens of GB free for image categories",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Rebuild staged parquet files and re-upload even if the remote copy matches",
+    ),
 ) -> None:
     """Consolidate samples and upload to HuggingFace."""
     consolidate_and_upload(
-        output_dir=output_dir, repo_id=repo_id, skip_images=skip_images
+        output_dir=output_dir,
+        repo_id=repo_id,
+        skip_images=skip_images,
+        work_dir=work_dir,
+        force=force,
     )
 
 

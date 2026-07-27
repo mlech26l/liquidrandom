@@ -14,6 +14,13 @@ class ImageSample:
     Shared by all image categories; ``category`` is injected by the loader
     (it is not a Parquet column). Images belonging to the same ``chain_id``
     form a base image (turn_index 0) plus a sequence of edited variants.
+
+    Within a chain, ``turn_index`` runs 0..chain_length-1 and is the sample's
+    position in the list returned by :func:`liquidrandom.image_chain`, so
+    ``chain[sample.parent_turn]`` is the image this one was edited from
+    (``parent_turn`` is -1 for the base). ``caption`` and ``prompt`` describe
+    the base image and are repeated across the chain; ``edit_instruction``
+    is what distinguishes an edited variant.
     """
 
     image: bytes = field(repr=False)

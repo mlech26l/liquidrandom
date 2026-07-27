@@ -285,7 +285,8 @@ img = liquidrandom.image("automotive", tags=["view:in_cabin", "people"])
 # multi-image data). Chains record which image each edit was applied to.
 chain = liquidrandom.image_chain("ui_screenshot")
 for s in chain:
-    print(s.turn_index, s.parent_turn, s.edit_instruction or "(base)")
+    parent = chain[s.parent_turn] if s.parent_turn >= 0 else None  # image it was edited from
+    print(s.turn_index, s.edit_instruction or "(base)")
 full = liquidrandom.image_chain_of(img)  # the chain a sample belongs to
 ```
 
@@ -303,7 +304,7 @@ full = liquidrandom.image_chain_of(img)  # the chain a sample belongs to
 | `retail_product()` | Products, shelves, packaging | `presentation:*`, `people`/`no_people` |
 | `food()` | Dishes, ingredients, kitchens | `stage:raw/cooking/plated`, `setting:*` |
 
-All functions accept `tags=[...]`, and the generic `liquidrandom.image(category, tags)` / `liquidrandom.image_chain(category, tags, min_length)` work across categories. Each `ImageSample` exposes `image` (bytes), `caption`, `prompt`, `tags`, `taxonomy_path`, `width`/`height`/`aspect_ratio`, and chain metadata (`chain_id`, `turn_index`, `parent_turn`, `edit_instruction`).
+All functions accept `tags=[...]`, and the generic `liquidrandom.image(category, tags)` / `liquidrandom.image_chain(category, tags, min_length)` work across categories. Each `ImageSample` exposes `image` (bytes), `caption`, `prompt`, `tags`, `taxonomy_path`, `width`/`height`/`aspect_ratio`, and chain metadata (`chain_id`, `turn_index`, `parent_turn`, `edit_instruction`). Within a chain, `turn_index` is the sample's position in the returned list, so `chain[s.parent_turn]` is the image `s` was edited from.
 
 Image files are large (several GB per category); the loader never materializes whole files — it reads single small row groups per sample, so memory stays flat.
 

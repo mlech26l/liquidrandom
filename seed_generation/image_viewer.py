@@ -10,7 +10,8 @@ from __future__ import annotations
 import base64
 import html
 import json
-from collections import defaultdict
+import math
+import random
 from pathlib import Path
 from typing import Any
 
@@ -53,28 +54,59 @@ function toggle(chip) {
 """
 
 
+def _iter_leaf_chains(jsonl: Path, limit: int) -> list[list[dict[str, Any]]]:
+    """Read up to `limit` whole chains from one leaf file, stopping early.
+
+    Chain rows are appended contiguously by the sampler, so a chain is complete
+    as soon as a different chain_id appears.
+    """
+    chains: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
+    with open(jsonl, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            if current and row["chain_id"] != current[0]["chain_id"]:
+                chains.append(current)
+                if len(chains) >= limit:
+                    return chains
+                current = []
+            current.append(row)
+    if current:
+        chains.append(current)
+    return chains[:limit]
+
+
 def _load_chains(
     output_dir: str, category: str, max_images: int
 ) -> list[list[dict[str, Any]]]:
-    """Load whole chains (sorted by turn) up to a total of max_images images."""
+    """Load whole chains (sorted by turn) up to a total of max_images images.
+
+    Chains are drawn from leaf files spread across the taxonomy rather than
+    from whichever leaves sort first, so the gallery is representative. Files
+    are read lazily and only as far as needed — a finished category holds
+    gigabytes of base64 per leaf directory.
+    """
     samples_dir = Path(output_dir) / "samples" / category
-    chains: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for jsonl in sorted(samples_dir.glob("*.jsonl")):
-        with open(jsonl, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    row = json.loads(line)
-                    chains[row["chain_id"]].append(row)
+    files = sorted(samples_dir.glob("*.jsonl"))
+    if not files:
+        return []
+    random.Random(0).shuffle(files)  # fixed seed: same gallery on re-render
+
+    # Assume 4-image chains when deciding how many to pull from each leaf.
+    per_leaf = max(1, math.ceil(max_images / 4 / len(files)))
 
     result: list[list[dict[str, Any]]] = []
     total = 0
-    for rows in chains.values():
-        rows.sort(key=lambda r: r["turn_index"])
-        if total + len(rows) > max_images and result:
-            break
-        result.append(rows)
-        total += len(rows)
+    for jsonl in files:
+        for rows in _iter_leaf_chains(jsonl, per_leaf):
+            rows.sort(key=lambda r: r["turn_index"])
+            if total + len(rows) > max_images and result:
+                return result
+            result.append(rows)
+            total += len(rows)
     return result
 
 

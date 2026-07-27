@@ -30,6 +30,7 @@ packages = ["src/liquidrandom"]
 [tool.hatch.build.targets.sdist]
 exclude = [
     "output/",
+    "image_output/",
     "backup/",
     "example_audio/",
     "seed_generation/output/",

@@ -40,6 +40,7 @@ Python package for pseudo-random seed data generation for ML/LLM training divers
     ├── validator.py                # LLM quality validation per batch (text)
     ├── dedup.py                    # Jaccard similarity dedup on token sets
     ├── llm.py                      # AsyncOpenAI client wrapper with retries
+    ├── tag_normalize.py            # Map drifted VLM tags back onto the controlled vocabulary
     ├── uploader.py                 # Consolidate JSONL → Parquet + upload to HF
     └── state.py                    # Checkpoint/resume state
 ```
@@ -94,6 +95,10 @@ All `from_dict()` methods use `list(data["field"] or [])` to handle None values 
 
 ### Upload
 `python generate.py upload-only` consolidates per-leaf JSONL into per-category zstd Parquet, generates a dataset card, uploads via `HfApi` (`HF_TOKEN` env var). Repo is auto-created.
+
+Image categories are tens of GB, so consolidation streams: rows are written in batches through a `pq.ParquetWriter` (memory stays flat) to a `.parquet.partial` file that is only renamed on success, staged in `<output-dir>/parquet` (override with `--work-dir`) rather than a temp dir. Uploads go file-by-file and skip anything whose remote size already matches, so an interrupted upload is resumed by re-running the command; `--force` rebuilds and re-uploads. Categories that exist only in the remote repo (e.g. text categories when uploading images from a machine that only generated images) keep their dataset-card entry — row counts are read from the remote Parquet footers.
+
+Image tags pass through `tag_normalize.TagNormalizer` during consolidation: the VLM occasionally re-prefixes a tag (`setting:setting:institutional`) or prefixes a bare one (`people:no_people`), which the package's exact-match filter could never select. Prefixes are peeled back to the controlled vocabulary and anything unmappable is dropped with a count.
 
 ### CLI usage
 ```bash

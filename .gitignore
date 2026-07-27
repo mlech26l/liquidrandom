@@ -6,3 +6,4 @@ build/
 .venv/
 seed_generation/output/
 .pytest_cache/
+image_output/
